@@ -22,6 +22,3 @@ preprocessing:
   brightness_cutoff: 240
 
   max_workers: 8
-
-advanced_config:
-  seed: 42
