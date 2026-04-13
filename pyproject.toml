@@ -14,7 +14,7 @@ authors = [
 ]
 description = "A protocol for Solid Tumor Associative Modeling in Pathology"
 readme = "README.md"
-requires-python = ">=3.13,<3.14"
+requires-python = ">=3.11,<3.14"
 
 classifiers = [
     "Programming Language :: Python :: 3",
@@ -57,7 +57,6 @@ build = [
     "ninja"
 ]
 flash-attention = [
-    "flash-attn==2.8.3",
     ]
 conch = [
     "huggingface-hub>=0.26.2",
@@ -96,16 +95,6 @@ virchow2 = [
     "huggingface-hub>=0.27.1",
     "torch>=2.0.0",
 ]
-cobra = [
-    "causal-conv1d @ https://github.com/Dao-AILab/causal-conv1d/releases/download/v1.6.1.post4/causal_conv1d-1.6.1+cu13torch2.10cxx11abiTRUE-cp313-cp313-linux_x86_64.whl ; sys_platform == 'linux' and platform_machine == 'x86_64' and python_version == '3.13' and extra == 'cobra'",
-    "causal-conv1d @ https://github.com/Dao-AILab/causal-conv1d/releases/download/v1.6.1.post4/causal_conv1d-1.6.1+cu13torch2.10cxx11abiTRUE-cp313-cp313-linux_aarch64.whl ; sys_platform == 'linux' and platform_machine == 'aarch64' and python_version == '3.13' and extra == 'cobra'",
-    "mamba-ssm @ https://github.com/state-spaces/mamba/releases/download/v2.3.1/mamba_ssm-2.3.1+cu13torch2.10cxx11abiTRUE-cp313-cp313-linux_x86_64.whl ; sys_platform == 'linux' and platform_machine == 'x86_64' and python_version == '3.13'",
-    "mamba-ssm @ https://github.com/state-spaces/mamba/releases/download/v2.3.1/mamba_ssm-2.3.1+cu13torch2.10cxx11abiTRUE-cp313-cp313-linux_aarch64.whl ; sys_platform == 'linux' and platform_machine == 'aarch64' and python_version == '3.13'",
-
-    "cobra @ git+http://github.com/KatherLab/COBRA.git@49d231191db5a9c2ea37a2398dd922c8c9ee9cdb",
-    "jinja2>=3.1.4",
-    "triton",
-]
 prism_cpu = [
     "sacremoses==0.1.1",
     "environs==11.0.0",
@@ -136,19 +125,17 @@ mcp = [
 
 # Blanket target
 cpu = [
-    "torch~=2.10.0",
-    "torchvision~=0.25.0",
     "stamp[conch,ctranspath,uni,virchow2,chief_ctranspath,conch1_5_cpu,prism_cpu,madeleine,musk_cpu,plip_cpu]"
 ]
 gpu = [
-    "torch~=2.10.0",
-    "torchvision~=0.25.0",
-    "stamp[conch,ctranspath,uni,virchow2,chief_ctranspath,conch1_5_cpu,prism,madeleine,plip,musk_cpu,cobra]"
+    "torch==2.5.1",
+    "torchvision==0.20.1",
+    "stamp[conch,ctranspath,uni,virchow2,chief_ctranspath,conch1_5_cpu,prism,madeleine,plip,musk_cpu]"
 ]
 gpu_all = [
-    "torch~=2.10.0",
-    "torchvision~=0.25.0",
-    "stamp[conch,ctranspath,uni,virchow2,chief_ctranspath,musk,gigapath,conch1_5,prism,madeleine,plip,cobra]"
+    "torch==2.5.1",
+    "torchvision==0.20.1",
+    "stamp[conch,ctranspath,uni,virchow2,chief_ctranspath,musk,gigapath,conch1_5,prism,madeleine,plip]"
 ]
 all = ["stamp[cpu]"]
 
@@ -196,21 +183,19 @@ conflicts = [
   ],
 ]
 build-constraint-dependencies = [
-  "torch==2.10.0",
-  "torchvision==0.25.0",
+  "torch==2.5.1",
+  "torchvision==0.20.1",
 ]
 
 
 [tool.uv.sources]
 torch = [
-  { index = "pytorch-cpu", extra = "cpu" },
-  { index = "pytorch-cu130", extra = "gpu" },
-  { index = "pytorch-cu130", extra = "gpu_all" },
+  { index = "pytorch-cu124", extra = "gpu" },
+  { index = "pytorch-cu124", extra = "gpu_all" },
 ]
 torchvision = [
-  { index = "pytorch-cpu", extra = "cpu" },
-  { index = "pytorch-cu130", extra = "gpu" },
-  { index = "pytorch-cu130", extra = "gpu_all" },
+  { index = "pytorch-cu124", extra = "gpu" },
+  { index = "pytorch-cu124", extra = "gpu_all" },
 ]
 
 [[tool.uv.index]]
@@ -219,8 +204,8 @@ url = "https://download.pytorch.org/whl/cpu"
 explicit = true
 
 [[tool.uv.index]]
-name = "pytorch-cu130"
-url = "https://download.pytorch.org/whl/cu130"
+name = "pytorch-cu124"
+url = "https://download.pytorch.org/whl/cu124"
 explicit = true
 
 
