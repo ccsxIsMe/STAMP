@@ -1,0 +1,24 @@
+preprocessing:
+  # Output directory for extracted features (.h5 files)
+  output_dir: "/data3/chensx/outputs/features/tcga_conch1_5"
+
+  # Path to TCGA WSI files on server
+  wsi_dir: "/data3/chensx/TCGA_LIHC_labeled/Slides"
+
+  extractor: "conch1_5"
+
+  device: "cuda"
+
+  # Reuse TCGA tile cache if available
+  cache_dir: "/data3/chensx/outputs/cache/tcga"
+  cache_tiles_ext: "jpg"
+
+  tile_size_um: 256.0
+  tile_size_px: 224
+
+  brightness_cutoff: 240
+
+  max_workers: 8
+
+advanced_config:
+  seed: 42

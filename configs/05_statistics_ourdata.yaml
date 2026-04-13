@@ -1,0 +1,16 @@
+statistics:
+  output_dir: "/data3/chensx/outputs/stats/ourdata_cls"
+
+  task: "classification"
+  ground_truth_label: "Early recurrence"
+
+  # Positive class for AUROC computation
+  true_class: "1"
+
+  # Predictions from 5-fold cross-validation
+  pred_csvs:
+  - "/data3/chensx/outputs/crossval/ourdata_cls_conch1_5/split-0/patient-preds.csv"
+  - "/data3/chensx/outputs/crossval/ourdata_cls_conch1_5/split-1/patient-preds.csv"
+  - "/data3/chensx/outputs/crossval/ourdata_cls_conch1_5/split-2/patient-preds.csv"
+  - "/data3/chensx/outputs/crossval/ourdata_cls_conch1_5/split-3/patient-preds.csv"
+  - "/data3/chensx/outputs/crossval/ourdata_cls_conch1_5/split-4/patient-preds.csv"

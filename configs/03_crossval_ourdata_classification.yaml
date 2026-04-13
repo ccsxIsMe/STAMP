@@ -1,0 +1,63 @@
+# ============================================================
+# Cross-validation: HCC Early Recurrence Prediction
+# Dataset: Private hospital (Ourdata), cohort 1 + 2 combined
+# Task: Binary classification (early recurrence yes/no at 24 months)
+#
+# Why binary classification (not survival analysis):
+#   - clinical1.csv: all status=0 patients have Time=24.0 (artificial threshold,
+#     not real follow-up time) -> Cox model assumptions violated
+#   - clinical2.csv: no censored patients (all status=0 have follow-up >= 25 months)
+#   - Both cohorts have unambiguous binary labels: recurrence within 24 months or not
+#
+# Label: Early recurrence = 1 (recurred within 24 months), 0 (no recurrence)
+# Metric: AUROC (primary), accuracy, F1
+# ============================================================
+
+crossval:
+  output_dir: "/data3/chensx/outputs/crossval/ourdata_cls_conch1_5"
+
+  # Merged clinical table (from scripts/prepare_data.py)
+  clini_table: "/data3/chensx/outputs/tables/ourdata_clinical_merged.csv"
+
+  # Extracted features directory
+  feature_dir: "/data3/chensx/outputs/features/ourdata_conch1_5"
+
+  # Slide table: PATIENT -> FILENAME (.h5)
+  slide_table: "/data3/chensx/outputs/tables/ourdata_slide_table.csv"
+
+  # Binary classification
+  task: "classification"
+
+  # Target column (0 = no early recurrence, 1 = early recurrence within 24 months)
+  ground_truth_label: "Early recurrence"
+
+  # The positive class (what we want to predict)
+  categories: ["0", "1"]
+
+  patient_label: "PATIENT"
+  filename_label: "FILENAME"
+
+  # 5-fold stratified cross-validation
+  n_splits: 5
+
+advanced_config:
+  seed: 42
+  max_epochs: 32
+  patience: 16
+  batch_size: 64
+  bag_size: 512
+  max_lr: 1e-4
+  div_factor: 25.0
+
+  # Transformer-based attention MIL
+  # Best performing model type for WSI classification in STAMP
+  model_name: "vit"
+
+  model_params:
+    vit:
+      dim_model: 512
+      dim_feedforward: 512
+      n_heads: 8
+      n_layers: 2
+      dropout: 0.25
+      use_alibi: false

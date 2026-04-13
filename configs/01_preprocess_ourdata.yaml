@@ -1,0 +1,27 @@
+preprocessing:
+  # Output directory for extracted features (.h5 files)
+  output_dir: "/data3/chensx/outputs/features/ourdata_conch1_5"
+
+  # Path to WSI files on server
+  wsi_dir: "/data3/chensx/Ourdata/Slides"
+
+  # Best performing extractor per Neidlinger et al. Nat Biomed Eng 2025
+  extractor: "conch1_5"
+
+  device: "cuda"
+
+  # Cache tiles to avoid re-tiling when trying multiple extractors
+  cache_dir: "/data3/chensx/outputs/cache/ourdata"
+  cache_tiles_ext: "jpg"
+
+  # Standard settings for HCC pathology (20x equivalent)
+  tile_size_um: 256.0
+  tile_size_px: 224
+
+  # Filter background tiles
+  brightness_cutoff: 240
+
+  max_workers: 8
+
+advanced_config:
+  seed: 42

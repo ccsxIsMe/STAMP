@@ -1,0 +1,34 @@
+# ============================================================
+# External validation: Deploy models trained on Ourdata to TCGA-LIHC
+# Task: Binary classification
+#
+# TCGA censoring handling:
+#   - 130 patients have PFI=No but PFI.months < 24 (true censored, ambiguous label)
+#   - These are EXCLUDED by scripts/prepare_data.py (prepare_tcga_clinical function)
+#   - Only patients with definitive labels are kept:
+#     * PFI=Yes AND PFI.months < 24 -> Early recurrence = 1
+#     * PFI=No AND PFI.months >= 24 -> Early recurrence = 0
+# ============================================================
+
+deployment:
+  output_dir: "/data3/chensx/outputs/deploy/tcga_external_val"
+
+  # Filtered TCGA clinical table (censored patients removed)
+  clini_table: "/data3/chensx/outputs/tables/tcga_clinical_filtered.csv"
+
+  feature_dir: "/data3/chensx/outputs/features/tcga_conch1_5"
+
+  slide_table: "/data3/chensx/outputs/tables/tcga_slide_table.csv"
+
+  ground_truth_label: "Early recurrence"
+
+  patient_label: "PATIENT"
+  filename_label: "FILENAME"
+
+  # Ensemble of all 5 fold models for majority vote
+  checkpoint_paths:
+  - "/data3/chensx/outputs/crossval/ourdata_cls_conch1_5/split-0/model.ckpt"
+  - "/data3/chensx/outputs/crossval/ourdata_cls_conch1_5/split-1/model.ckpt"
+  - "/data3/chensx/outputs/crossval/ourdata_cls_conch1_5/split-2/model.ckpt"
+  - "/data3/chensx/outputs/crossval/ourdata_cls_conch1_5/split-3/model.ckpt"
+  - "/data3/chensx/outputs/crossval/ourdata_cls_conch1_5/split-4/model.ckpt"
