@@ -198,34 +198,52 @@ def make_slide_table_ourdata(feature_dir: Path, clinical_df: pd.DataFrame) -> pd
 # Main
 # ============================================================
 if __name__ == "__main__":
-    print("=" * 60)
-    print("Step 1: Merge Ourdata clinical tables")
-    print("=" * 60)
-    ourdata_merged = merge_ourdata_clinical()
+    import argparse
 
-    # Save merged table (for local inspection)
-    out_path = DATA_INFO_DIR / "ourdata_clinical_merged.csv"
-    ourdata_merged.to_csv(out_path, index=False)
-    print(f"Saved: {out_path}\n")
+    parser = argparse.ArgumentParser(description="Data preparation for HCC Early Recurrence Prediction")
+    parser.add_argument("--task", choices=["all", "slide_table"], default="all",
+                        help="'all': merge clinical tables; 'slide_table': generate slide table from .h5 files")
+    parser.add_argument("--feature_dir", type=Path,
+                        help="Directory containing extracted .h5 feature files (required for slide_table task)")
+    parser.add_argument("--clini_csv", type=Path,
+                        help="Path to clinical CSV file for patient ID matching (required for slide_table task)")
+    parser.add_argument("--output", type=Path,
+                        help="Output path for slide table CSV (required for slide_table task)")
+    args = parser.parse_args()
 
-    print("=" * 60)
-    print("Step 2: Prepare TCGA clinical table")
-    print("=" * 60)
-    tcga_filtered = prepare_tcga_clinical()
+    if args.task == "slide_table":
+        # Generate slide table: map PATIENT -> FILENAME (.h5)
+        if not args.feature_dir or not args.clini_csv or not args.output:
+            parser.error("--feature_dir, --clini_csv, and --output are required for slide_table task")
 
-    out_path = DATA_INFO_DIR / "tcga_clinical_filtered.csv"
-    tcga_filtered.to_csv(out_path, index=False)
-    print(f"Saved: {out_path}\n")
+        clini_df = pd.read_csv(args.clini_csv)
+        clini_df["PATIENT"] = clini_df["PATIENT"].astype(str)
 
-    print("=" * 60)
-    print("Step 3: Slide tables (run on server after feature extraction)")
-    print("=" * 60)
-    print("After feature extraction, run the following on the server:")
-    print("""
-  python scripts/prepare_data.py --make-slide-table \\
-    --feature-dir /data3/chensx/outputs/features/ourdata_conch1_5 \\
-    --clini-table /data3/chensx/outputs/tables/ourdata_clinical_merged.csv \\
-    --output /data3/chensx/outputs/tables/ourdata_slide_table.csv
-    """)
-    print("Adjust the PATIENT ID matching logic in make_slide_table_ourdata()")
-    print("based on the actual .h5 filenames after feature extraction.")
+        slide_df = make_slide_table_ourdata(args.feature_dir, clini_df)
+
+        args.output.parent.mkdir(parents=True, exist_ok=True)
+        slide_df.to_csv(args.output, index=False)
+        print(f"Saved slide table: {args.output}")
+        print(f"  {len(slide_df)} slides matched to clinical table")
+        print("\nFirst few rows:")
+        print(slide_df.head().to_string(index=False))
+
+    else:
+        # Default: run all clinical table preparation steps
+        print("=" * 60)
+        print("Step 1: Merge Ourdata clinical tables")
+        print("=" * 60)
+        ourdata_merged = merge_ourdata_clinical()
+
+        out_path = DATA_INFO_DIR / "ourdata_clinical_merged.csv"
+        ourdata_merged.to_csv(out_path, index=False)
+        print(f"Saved: {out_path}\n")
+
+        print("=" * 60)
+        print("Step 2: Prepare TCGA clinical table")
+        print("=" * 60)
+        tcga_filtered = prepare_tcga_clinical()
+
+        out_path = DATA_INFO_DIR / "tcga_clinical_filtered.csv"
+        tcga_filtered.to_csv(out_path, index=False)
+        print(f"Saved: {out_path}\n")
