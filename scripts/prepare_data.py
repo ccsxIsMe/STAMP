@@ -38,14 +38,15 @@ def merge_ourdata_clinical():
     df1 = pd.read_csv(DATA_INFO_DIR / "Ourdata_clinical1.csv")
     df2 = pd.read_csv(DATA_INFO_DIR / "Ourdata_clinical2.csv")
 
-    # Standardize patient ID column name
-    df1 = df1.rename(columns={"ID": "PATIENT"})
-    df2 = df2.rename(columns={"住院 号": "PATIENT"})  # note: space between 院 and 号
+    # Use 病理号 (pathology number) as PATIENT — matches SVS/h5 filenames (e.g. B201931052)
+    # Keep original hospitalization number as HOSP_ID for reference
+    df1 = df1.rename(columns={"ID": "HOSP_ID", "病理号": "PATIENT"})
+    df2 = df2.rename(columns={"住院 号": "HOSP_ID", "病理号": "PATIENT"})  # note: space in 住院 号
 
     # Keep only columns needed for STAMP survival task
     # (add more columns if you want to use clinical features in multimodal fusion later)
-    core_cols_1 = ["PATIENT", "Time", "Early recurrence"]
-    core_cols_2 = ["PATIENT", "Time", "Early recurrence"]
+    core_cols_1 = ["PATIENT", "HOSP_ID", "Time", "Early recurrence"]
+    core_cols_2 = ["PATIENT", "HOSP_ID", "Time", "Early recurrence"]
 
     # Optional: add clinical features for future multimodal use
     clinical_cols_1 = [
@@ -171,9 +172,9 @@ def make_slide_table_ourdata(feature_dir: Path, clinical_df: pd.DataFrame) -> pd
     # The FILENAME column should be relative to feature_dir
     rows = []
     for h5_file in h5_files:
-        # Extract patient ID from filename
-        # Common patterns: "12345.h5", "12345_something.h5", "TCGA-XX-XXXX.h5"
-        patient_id = h5_file.stem.split("_")[0]  # adjust as needed
+        # PATIENT = stem of h5 file (e.g. "B201109732"), matches 病理号 in clinical table
+        # FILENAME = relative path from feature_dir (e.g. "conch1_5-49b04e14/B201109732.h5")
+        patient_id = h5_file.stem
         rows.append({
             "PATIENT": str(patient_id),
             "FILENAME": str(h5_file.relative_to(feature_dir))
