@@ -1,32 +1,13 @@
 # ============================================================
 # Exp06: Macenko stain normalization for TCGA
-# Step 1: Re-extract TCGA features with Macenko normalization
-# Step 2: Re-run crossval (baseline ViT) with new TCGA features
-# Step 3: Deploy with new TCGA features
 #
-# Hypothesis: Stain normalization reduces domain shift between
-# Chinese hospital (Ourdata) and TCGA (US sites)
+# IMPORTANT: STAMP preprocessing does NOT support built-in
+# Macenko normalization (no 'normalizer' field in config).
 #
-# NOTE: After running this, regenerate tcga_slide_table pointing
-# to the new feature dir, then run exp06_deploy.yaml
+# Workaround: Use torchstain library to normalize TCGA tiles
+# BEFORE feature extraction via a custom wrapper script.
+# See scripts/macenko_preprocess.py for instructions.
+#
+# This experiment is SKIPPED in Phase 1.
+# Revisit if Exp01-05 show significant domain shift.
 # ============================================================
-
-preprocessing:
-  output_dir: "/data3/chensx/STAMP/outputs/features/tcga_conch1_5_macenko"
-
-  wsi_dir: "/data3/chensx/TCGA_LIHC_labeled/Slides"
-  extractor: "conch1_5"
-  device: "cuda"
-
-  cache_dir: "/data3/chensx/STAMP/outputs/cache/tcga_macenko"
-  cache_tiles_ext: "jpg"
-
-  tile_size_um: 256.0
-  tile_size_px: 224
-
-  brightness_cutoff: 240
-  max_workers: 8
-
-  # Macenko stain normalization
-  # Normalizes TCGA slides toward a reference staining style
-  normalizer: "macenko"

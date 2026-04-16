@@ -1,0 +1,14 @@
+preprocessing:
+  output_dir: "/data3/chensx/STAMP/outputs/features/tcga_uni2"
+
+  wsi_dir: "/data3/chensx/TCGA_LIHC_labeled/Slides"
+  extractor: "uni2"
+  device: "cuda"
+
+  cache_dir: "/data3/chensx/STAMP/outputs/cache/tcga_uni2"
+  cache_tiles_ext: "jpg"
+
+  tile_size_um: 256.0
+  tile_size_px: 224
+  brightness_cutoff: 240
+  max_workers: 8
