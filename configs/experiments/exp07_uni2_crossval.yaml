@@ -1,0 +1,44 @@
+# ============================================================
+# Exp07 Step 2: CrossVal with UNI2 features (baseline ViT model)
+# After running exp07_uni2_preprocess_ourdata.yaml and
+# regenerating slide table for UNI2 features
+# ============================================================
+
+crossval:
+  output_dir: "/data3/chensx/STAMP/outputs/crossval/exp07_uni2"
+
+  clini_table: "/data3/chensx/outputs/tables/ourdata_clinical_merged.csv"
+  feature_dir: "/data3/chensx/STAMP/outputs/features/ourdata_uni2"
+  # Regenerate after extraction:
+  # python scripts/prepare_data.py --task slide_table \
+  #   --feature_dir /data3/chensx/STAMP/outputs/features/ourdata_uni2 \
+  #   --clini_csv /data3/chensx/STAMP/data_info/ourdata_clinical_merged.csv \
+  #   --output /data3/chensx/STAMP/outputs/tables/ourdata_slide_table_uni2.csv
+  slide_table: "/data3/chensx/STAMP/outputs/tables/ourdata_slide_table_uni2.csv"
+
+  task: "classification"
+  ground_truth_label: "Early recurrence"
+  categories: ["0", "1"]
+  patient_label: "PATIENT"
+  filename_label: "FILENAME"
+  n_splits: 5
+
+advanced_config:
+  seed: 42
+  max_epochs: 32
+  patience: 16
+  batch_size: 64
+  bag_size: 512
+  max_lr: 1e-4
+  div_factor: 25.0
+
+  model_name: "vit"
+
+  model_params:
+    vit:
+      dim_model: 512
+      dim_feedforward: 512
+      n_heads: 8
+      n_layers: 2
+      dropout: 0.25
+      use_alibi: false

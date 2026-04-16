@@ -1,0 +1,29 @@
+# ============================================================
+# Exp06 Deploy: Use baseline (Exp00) models but with
+# Macenko-normalized TCGA features
+# Isolates the effect of stain normalization on TCGA AUROC
+# ============================================================
+
+deployment:
+  output_dir: "/data3/chensx/STAMP/outputs/deploy/exp06_macenko"
+
+  clini_table: "/data3/chensx/outputs/tables/tcga_clinical_filtered.csv"
+  feature_dir: "/data3/chensx/STAMP/outputs/features/tcga_conch1_5_macenko"
+  # NOTE: regenerate slide table after re-extraction:
+  # python scripts/prepare_data.py --task slide_table --tcga \
+  #   --feature_dir /data3/chensx/STAMP/outputs/features/tcga_conch1_5_macenko \
+  #   --clini_csv /data3/chensx/STAMP/data_info/tcga_clinical_filtered.csv \
+  #   --output /data3/chensx/STAMP/outputs/tables/tcga_slide_table_macenko.csv
+  slide_table: "/data3/chensx/STAMP/outputs/tables/tcga_slide_table_macenko.csv"
+
+  ground_truth_label: "Early recurrence"
+  patient_label: "PATIENT"
+  filename_label: "FILENAME"
+
+  # Use baseline (Exp00) checkpoints — isolates effect of normalization
+  checkpoint_paths:
+  - "/data3/chensx/outputs/crossval/ourdata_cls_conch1_5/split-0/model.ckpt"
+  - "/data3/chensx/outputs/crossval/ourdata_cls_conch1_5/split-1/model.ckpt"
+  - "/data3/chensx/outputs/crossval/ourdata_cls_conch1_5/split-2/model.ckpt"
+  - "/data3/chensx/outputs/crossval/ourdata_cls_conch1_5/split-3/model.ckpt"
+  - "/data3/chensx/outputs/crossval/ourdata_cls_conch1_5/split-4/model.ckpt"

@@ -1,0 +1,52 @@
+# ============================================================
+# Exp08: Cohort2-only survival analysis
+#
+# Rationale:
+#   - Cohort1 (337 patients): Time=24.0 for ALL status=0 (artificial, not real)
+#   - Cohort2 (290 patients): Real follow-up times 25-132 months
+#     -> Valid for Cox survival analysis (no censoring issues)
+#
+# Design:
+#   - Train on Cohort2 only (survival task, continuous time)
+#   - Use Cohort1 as independent external validation (binary)
+#   - Use TCGA as external validation (OS endpoint)
+#
+# This creates a stronger 3-tier validation:
+#   Train (Cohort2) -> Internal test -> Cohort1 -> TCGA
+# ============================================================
+
+crossval:
+  output_dir: "/data3/chensx/STAMP/outputs/crossval/exp08_cohort2_survival"
+
+  # Cohort2-only clinical table — filter before running:
+  # python scripts/prepare_data.py --task cohort2_only (add this function)
+  clini_table: "/data3/chensx/STAMP/outputs/tables/ourdata_cohort2_clinical.csv"
+  feature_dir: "/data3/chensx/outputs/features/ourdata_conch1_5"
+  slide_table:  "/data3/chensx/STAMP/outputs/tables/ourdata_cohort2_slide_table.csv"
+
+  task: "survival"
+  ground_truth_label: "Early recurrence"  # event column (0/1)
+  time_label: "Time"                       # follow-up time in months
+  patient_label: "PATIENT"
+  filename_label: "FILENAME"
+  n_splits: 5
+
+advanced_config:
+  seed: 42
+  max_epochs: 32
+  patience: 16
+  batch_size: 64
+  bag_size: 512
+  max_lr: 1e-4
+  div_factor: 25.0
+
+  model_name: "vit"
+
+  model_params:
+    vit:
+      dim_model: 512
+      dim_feedforward: 512
+      n_heads: 8
+      n_layers: 2
+      dropout: 0.25
+      use_alibi: false

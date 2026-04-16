@@ -1,0 +1,20 @@
+# ============================================================
+# Exp07 Step 1: Extract features with UNI2 extractor
+# UNI2 is trained specifically on H&E pathology images
+# Compare vs CONCH1.5 to find best feature extractor
+# ============================================================
+
+preprocessing:
+  output_dir: "/data3/chensx/STAMP/outputs/features/ourdata_uni2"
+
+  wsi_dir: "/data3/chensx/HCC_labeled/Slides"
+  extractor: "uni2"
+  device: "cuda"
+
+  cache_dir: "/data3/chensx/STAMP/outputs/cache/ourdata_uni2"
+  cache_tiles_ext: "jpg"
+
+  tile_size_um: 256.0
+  tile_size_px: 224
+  brightness_cutoff: 240
+  max_workers: 8

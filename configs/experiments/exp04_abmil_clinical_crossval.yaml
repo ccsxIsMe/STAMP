@@ -1,0 +1,40 @@
+# ============================================================
+# Exp04: ABMIL + clinical features (combination of Exp01 + Exp02)
+# ============================================================
+
+crossval:
+  output_dir: "/data3/chensx/STAMP/outputs/crossval/exp04_abmil_clinical"
+
+  clini_table: "/data3/chensx/outputs/tables/ourdata_clinical_merged.csv"
+  feature_dir: "/data3/chensx/outputs/features/ourdata_conch1_5"
+  slide_table:  "/data3/chensx/outputs/tables/ourdata_slide_table.csv"
+
+  task: "classification"
+  ground_truth_label: "Early recurrence"
+  categories: ["0", "1"]
+  patient_label: "PATIENT"
+  filename_label: "FILENAME"
+  n_splits: 5
+
+  cont_labels:
+    - "AFP (ng/ml)"
+    - "年龄"
+  cat_labels:
+    - "性别"
+
+advanced_config:
+  seed: 42
+  max_epochs: 32
+  patience: 16
+  batch_size: 64
+  bag_size: 512
+  max_lr: 1e-4
+  div_factor: 25.0
+
+  model_name: "abmil"
+
+  model_params:
+    abmil:
+      dim_model: 512
+      dim_feedforward: 256
+      dropout: 0.25
