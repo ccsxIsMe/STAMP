@@ -9,12 +9,6 @@ deployment:
   patient_label: "PATIENT"
   filename_label: "FILENAME"
 
-  cont_labels:
-    - "AFP (ng/ml)"
-    - "ÄêÁä"
-  cat_labels:
-    - "ÐÔ±ð"
-
   checkpoint_paths:
   - "/data3/chensx/STAMP/outputs/crossval/exp05_abmil_clinical_longtrain/split-0/model.ckpt"
   - "/data3/chensx/STAMP/outputs/crossval/exp05_abmil_clinical_longtrain/split-1/model.ckpt"

@@ -9,14 +9,6 @@ deployment:
   patient_label: "PATIENT"
   filename_label: "FILENAME"
 
-  # NOTE: TCGA clini_table must have AFP, 性别, 年龄 columns for fusion
-  # If TCGA lacks these columns, remove cont_labels/cat_labels here
-  cont_labels:
-    - "AFP (ng/ml)"
-    - "年龄"
-  cat_labels:
-    - "性别"
-
   checkpoint_paths:
   - "/data3/chensx/STAMP/outputs/crossval/exp02_vit_clinical/split-0/model.ckpt"
   - "/data3/chensx/STAMP/outputs/crossval/exp02_vit_clinical/split-1/model.ckpt"
