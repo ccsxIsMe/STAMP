@@ -1,5 +1,7 @@
 # ============================================================
-# Exp04: ABMIL + clinical features (combination of Exp01 + Exp02)
+# Exp04: TransMIL + clinical ensemble (combination of Exp01 + Exp02)
+# Step 1: Run this crossval config (TransMIL WSI model)
+# Step 2: Run scripts/clinical_ensemble.py on the predictions
 # ============================================================
 
 crossval:
@@ -16,12 +18,6 @@ crossval:
   filename_label: "FILENAME"
   n_splits: 5
 
-  cont_labels:
-    - "AFP (ng/ml)"
-    - "年龄"
-  cat_labels:
-    - "性别"
-
 advanced_config:
   seed: 42
   max_epochs: 32
@@ -31,10 +27,8 @@ advanced_config:
   max_lr: 1e-4
   div_factor: 25.0
 
-  model_name: "abmil"
+  model_name: "trans_mil"
 
   model_params:
-    abmil:
-      dim_model: 512
-      dim_feedforward: 256
-      dropout: 0.25
+    trans_mil:
+      dim_hidden: 512

@@ -1,10 +1,18 @@
 # ============================================================
-# Exp02: ViT + clinical feature fusion
-# Change: add cont_labels and cat_labels from clini_table
-# Using only 100%-complete columns shared across both cohorts:
-#   - AFP (ng/ml): continuous, key HCC biomarker
-#   - 性别: categorical (gender)
-#   - 年龄: continuous (age)
+# Exp02: ViT + Clinical Feature Post-hoc Ensemble
+#
+# STAMP does not support clinical feature fusion natively.
+# Strategy: train a separate logistic regression on clinical
+# features, then ensemble WSI scores + clinical scores.
+#
+# Step 1: This config trains WSI-only model (same as baseline)
+#         but outputs fold predictions for clinical ensemble.
+# Step 2: Run scripts/clinical_ensemble.py to add clinical features.
+#
+# Clinical features used (100% complete in both cohorts):
+#   - AFP (ng/ml): continuous
+#   - 年龄 (age): continuous
+#   - 性别 (sex): categorical
 # ============================================================
 
 crossval:
@@ -20,13 +28,6 @@ crossval:
   patient_label: "PATIENT"
   filename_label: "FILENAME"
   n_splits: 5
-
-  # Clinical feature fusion
-  cont_labels:
-    - "AFP (ng/ml)"
-    - "年龄"
-  cat_labels:
-    - "性别"
 
 advanced_config:
   seed: 42

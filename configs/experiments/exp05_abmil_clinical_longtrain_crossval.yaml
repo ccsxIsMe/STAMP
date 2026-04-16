@@ -1,6 +1,8 @@
 # ============================================================
-# Exp05: ABMIL + clinical features + longer training
+# Exp05: TransMIL + clinical ensemble + longer training
 # Best combination experiment
+# Step 1: Run this crossval (TransMIL, long training)
+# Step 2: Run scripts/clinical_ensemble.py on predictions
 # ============================================================
 
 crossval:
@@ -17,12 +19,6 @@ crossval:
   filename_label: "FILENAME"
   n_splits: 5
 
-  cont_labels:
-    - "AFP (ng/ml)"
-    - "年龄"
-  cat_labels:
-    - "性别"
-
 advanced_config:
   seed: 42
   max_epochs: 64
@@ -32,10 +28,8 @@ advanced_config:
   max_lr: 3e-4
   div_factor: 25.0
 
-  model_name: "abmil"
+  model_name: "trans_mil"
 
   model_params:
-    abmil:
-      dim_model: 512
-      dim_feedforward: 256
-      dropout: 0.25
+    trans_mil:
+      dim_hidden: 512
