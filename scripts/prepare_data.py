@@ -195,6 +195,41 @@ def make_slide_table_ourdata(feature_dir: Path, clinical_df: pd.DataFrame) -> pd
     return matched
 
 
+def make_slide_table_tcga(feature_dir: Path, clinical_df: pd.DataFrame) -> pd.DataFrame:
+    """
+    Generate slide table for TCGA-LIHC mapping PATIENT -> FILENAME (.h5).
+
+    TCGA SVS filenames look like: TCGA-BC-A10Q-01Z-00-DX1.svs
+    TCGA patient barcodes (PATIENT column) look like: TCGA-BC-A10Q  (first 12 chars)
+
+    Matching: extract first 12 chars of h5 stem -> compare to PATIENT column.
+    """
+    h5_files = list(feature_dir.rglob("*.h5"))
+    print(f"Found {len(h5_files)} .h5 files in {feature_dir}")
+
+    rows = []
+    for h5_file in h5_files:
+        stem = h5_file.stem  # e.g. "TCGA-BC-A10Q-01Z-00-DX1"
+        # TCGA patient barcode = first 12 characters: "TCGA-XX-XXXX"
+        patient_id = stem[:12]
+        rows.append({
+            "PATIENT": patient_id,
+            "FILENAME": str(h5_file.relative_to(feature_dir))
+        })
+
+    slide_df = pd.DataFrame(rows)
+    valid_patients = set(clinical_df["PATIENT"].astype(str))
+    slide_df["PATIENT"] = slide_df["PATIENT"].astype(str)
+    matched = slide_df[slide_df["PATIENT"].isin(valid_patients)]
+
+    unmatched_count = len(slide_df) - len(matched)
+    print(f"Slide table: {len(slide_df)} slides, {len(matched)} matched to clinical table")
+    if unmatched_count > 0:
+        print(f"  WARNING: {unmatched_count} slides without clinical data (will be ignored by STAMP)")
+
+    return matched
+
+
 # ============================================================
 # Main
 # ============================================================
@@ -210,6 +245,8 @@ if __name__ == "__main__":
                         help="Path to clinical CSV file for patient ID matching (required for slide_table task)")
     parser.add_argument("--output", type=Path,
                         help="Output path for slide table CSV (required for slide_table task)")
+    parser.add_argument("--tcga", action="store_true",
+                        help="Use TCGA patient barcode matching (first 12 chars of filename) instead of exact match")
     args = parser.parse_args()
 
     if args.task == "slide_table":
@@ -220,7 +257,10 @@ if __name__ == "__main__":
         clini_df = pd.read_csv(args.clini_csv)
         clini_df["PATIENT"] = clini_df["PATIENT"].astype(str)
 
-        slide_df = make_slide_table_ourdata(args.feature_dir, clini_df)
+        if args.tcga:
+            slide_df = make_slide_table_tcga(args.feature_dir, clini_df)
+        else:
+            slide_df = make_slide_table_ourdata(args.feature_dir, clini_df)
 
         args.output.parent.mkdir(parents=True, exist_ok=True)
         slide_df.to_csv(args.output, index=False)
