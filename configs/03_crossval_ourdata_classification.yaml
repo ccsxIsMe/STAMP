@@ -14,16 +14,16 @@
 # ============================================================
 
 crossval:
-  output_dir: "/data3/chensx/outputs/crossval/ourdata_cls_conch1_5"
+  output_dir: "/data3/chensx/STAMP/outputs/crossval/ourdata_cls_conch1_5"
 
   # Merged clinical table (from scripts/prepare_data.py)
-  clini_table: "/data3/chensx/outputs/tables/ourdata_clinical_merged.csv"
+  clini_table: "/data3/chensx/STAMP/outputs/tables/ourdata_clinical_merged.csv"
 
   # Extracted features directory
-  feature_dir: "/data3/chensx/outputs/features/ourdata_conch1_5"
+  feature_dir: "/data3/chensx/STAMP/outputs/features/ourdata_conch1_5"
 
   # Slide table: PATIENT -> FILENAME (.h5)
-  slide_table: "/data3/chensx/outputs/tables/ourdata_slide_table.csv"
+  slide_table: "/data3/chensx/STAMP/outputs/tables/ourdata_slide_table.csv"
 
   # Binary classification
   task: "classification"

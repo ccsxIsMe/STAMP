@@ -1,19 +1,13 @@
 deployment:
   output_dir: "/data3/chensx/STAMP/outputs/deploy/exp04_abmil_clinical"
 
-  clini_table: "/data3/chensx/outputs/tables/tcga_clinical_filtered.csv"
-  feature_dir: "/data3/chensx/outputs/features/tcga_conch1_5"
-  slide_table:  "/data3/chensx/outputs/tables/tcga_slide_table.csv"
+  clini_table: "/data3/chensx/STAMP/outputs/tables/tcga_clinical_filtered.csv"
+  feature_dir: "/data3/chensx/STAMP/outputs/features/tcga_conch1_5"
+  slide_table:  "/data3/chensx/STAMP/outputs/tables/tcga_slide_table.csv"
 
   ground_truth_label: "Early recurrence"
   patient_label: "PATIENT"
   filename_label: "FILENAME"
-
-  cont_labels:
-    - "AFP (ng/ml)"
-    - "ÄêÁä"
-  cat_labels:
-    - "ÐÔ±ð"
 
   checkpoint_paths:
   - "/data3/chensx/STAMP/outputs/crossval/exp04_abmil_clinical/split-0/model.ckpt"

@@ -10,9 +10,9 @@
 crossval:
   output_dir: "/data3/chensx/STAMP/outputs/crossval/exp03_vit_longtrain"
 
-  clini_table: "/data3/chensx/outputs/tables/ourdata_clinical_merged.csv"
-  feature_dir: "/data3/chensx/outputs/features/ourdata_conch1_5"
-  slide_table:  "/data3/chensx/outputs/tables/ourdata_slide_table.csv"
+  clini_table: "/data3/chensx/STAMP/outputs/tables/ourdata_clinical_merged.csv"
+  feature_dir: "/data3/chensx/STAMP/outputs/features/ourdata_conch1_5"
+  slide_table:  "/data3/chensx/STAMP/outputs/tables/ourdata_slide_table.csv"
 
   task: "classification"
   ground_truth_label: "Early recurrence"

@@ -1,6 +1,6 @@
 preprocessing:
   # Output directory for extracted features (.h5 files)
-  output_dir: "/data3/chensx/outputs/features/ourdata_conch1_5"
+  output_dir: "/data3/chensx/STAMP/outputs/features/ourdata_conch1_5"
 
   # Path to WSI files on server
   wsi_dir: "/data3/chensx/Ourdata/Slides"
@@ -11,7 +11,7 @@ preprocessing:
   device: "cuda"
 
   # Cache tiles to avoid re-tiling when trying multiple extractors
-  cache_dir: "/data3/chensx/outputs/cache/ourdata"
+  cache_dir: "/data3/chensx/STAMP/outputs/cache/ourdata"
   cache_tiles_ext: "jpg"
 
   # Standard settings for HCC pathology (20x equivalent)
