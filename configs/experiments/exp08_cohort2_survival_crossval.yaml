@@ -21,7 +21,7 @@ crossval:
   # Cohort2-only clinical table — filter before running:
   # python scripts/prepare_data.py --task cohort2_only (add this function)
   clini_table: "/data3/chensx/STAMP/outputs/tables/ourdata_cohort2_clinical.csv"
-  feature_dir: "/data3/chensx/outputs/features/ourdata_conch1_5"
+  feature_dir: "/data3/chensx/STAMP/outputs/features/ourdata_conch1_5"
   slide_table:  "/data3/chensx/STAMP/outputs/tables/ourdata_cohort2_slide_table.csv"
 
   task: "survival"

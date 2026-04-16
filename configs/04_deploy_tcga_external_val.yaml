@@ -11,14 +11,14 @@
 # ============================================================
 
 deployment:
-  output_dir: "/data3/chensx/outputs/deploy/tcga_external_val"
+  output_dir: "/data3/chensx/STAMP/outputs/deploy/tcga_external_val"
 
   # Filtered TCGA clinical table (censored patients removed)
-  clini_table: "/data3/chensx/outputs/tables/tcga_clinical_filtered.csv"
+  clini_table: "/data3/chensx/STAMP/outputs/tables/tcga_clinical_filtered.csv"
 
-  feature_dir: "/data3/chensx/outputs/features/tcga_conch1_5"
+  feature_dir: "/data3/chensx/STAMP/outputs/features/tcga_conch1_5"
 
-  slide_table: "/data3/chensx/outputs/tables/tcga_slide_table.csv"
+  slide_table: "/data3/chensx/STAMP/outputs/tables/tcga_slide_table.csv"
 
   ground_truth_label: "Early recurrence"
 
@@ -27,8 +27,8 @@ deployment:
 
   # Ensemble of all 5 fold models for majority vote
   checkpoint_paths:
-  - "/data3/chensx/outputs/crossval/ourdata_cls_conch1_5/split-0/model.ckpt"
-  - "/data3/chensx/outputs/crossval/ourdata_cls_conch1_5/split-1/model.ckpt"
-  - "/data3/chensx/outputs/crossval/ourdata_cls_conch1_5/split-2/model.ckpt"
-  - "/data3/chensx/outputs/crossval/ourdata_cls_conch1_5/split-3/model.ckpt"
-  - "/data3/chensx/outputs/crossval/ourdata_cls_conch1_5/split-4/model.ckpt"
+  - "/data3/chensx/STAMP/outputs/crossval/ourdata_cls_conch1_5/split-0/model.ckpt"
+  - "/data3/chensx/STAMP/outputs/crossval/ourdata_cls_conch1_5/split-1/model.ckpt"
+  - "/data3/chensx/STAMP/outputs/crossval/ourdata_cls_conch1_5/split-2/model.ckpt"
+  - "/data3/chensx/STAMP/outputs/crossval/ourdata_cls_conch1_5/split-3/model.ckpt"
+  - "/data3/chensx/STAMP/outputs/crossval/ourdata_cls_conch1_5/split-4/model.ckpt"

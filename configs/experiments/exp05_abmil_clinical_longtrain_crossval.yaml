@@ -8,9 +8,9 @@
 crossval:
   output_dir: "/data3/chensx/STAMP/outputs/crossval/exp05_abmil_clinical_longtrain"
 
-  clini_table: "/data3/chensx/outputs/tables/ourdata_clinical_merged.csv"
-  feature_dir: "/data3/chensx/outputs/features/ourdata_conch1_5"
-  slide_table:  "/data3/chensx/outputs/tables/ourdata_slide_table.csv"
+  clini_table: "/data3/chensx/STAMP/outputs/tables/ourdata_clinical_merged.csv"
+  feature_dir: "/data3/chensx/STAMP/outputs/features/ourdata_conch1_5"
+  slide_table:  "/data3/chensx/STAMP/outputs/tables/ourdata_slide_table.csv"
 
   task: "classification"
   ground_truth_label: "Early recurrence"
@@ -23,7 +23,7 @@ advanced_config:
   seed: 42
   max_epochs: 64
   patience: 24
-  batch_size: 64
+  batch_size: 32
   bag_size: 1024
   max_lr: 3e-4
   div_factor: 25.0
