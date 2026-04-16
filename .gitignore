@@ -175,4 +175,4 @@ cython_debug/
 *jpg
 *png
 *.h5
-*.svg
+*.zip
