@@ -7,7 +7,7 @@
 preprocessing:
   output_dir: "/data3/chensx/STAMP/outputs/features/ourdata_uni2"
 
-  wsi_dir: "/data3/chensx/HCC_labeled/Slides"
+  wsi_dir: "/data3/chensx/Ourdata/Slides"
   extractor: "uni2"
   device: "cuda"
 
