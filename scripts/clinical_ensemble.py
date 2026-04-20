@@ -42,6 +42,8 @@ def roc_auc(y_true, y_score):
 
 
 def bootstrap_ci(y_true, y_score, n=1000, seed=42):
+    y_true = np.array(y_true, dtype=float)
+    y_score = np.array(y_score, dtype=float)
     np.random.seed(seed)
     aucs = []
     for _ in range(n):
