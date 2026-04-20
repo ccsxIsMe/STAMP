@@ -99,6 +99,12 @@ class TransMILModelParams(BaseModel):
     dim_hidden: int = 512
 
 
+class AbmilModelParams(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    dim_hidden: int = 256
+    dropout: float = 0.25
+
+
 class BarspoonParams(BaseModel):
     model_config = ConfigDict(extra="forbid")
     d_model: int = 512
@@ -131,6 +137,7 @@ class ModelParams(BaseModel):
     mlp: MlpModelParams = Field(default_factory=MlpModelParams)
     linear: LinearModelParams = Field(default_factory=LinearModelParams)
     barspoon: BarspoonParams = Field(default_factory=BarspoonParams)
+    abmil: AbmilModelParams = Field(default_factory=AbmilModelParams)
 
 
 class AdvancedConfig(BaseModel):
