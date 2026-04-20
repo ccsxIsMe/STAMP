@@ -82,6 +82,21 @@ CLINICAL_CONT = ["AFP (ng/ml)", "年龄"]
 CLINICAL_CAT  = ["性别"]
 
 
+def _parse_numeric(series: pd.Series) -> pd.Series:
+    """Strip leading comparison operators (>, <, ≥, ≤ and full-width variants) then cast to float."""
+    import re
+    def _clean(v):
+        if pd.isna(v):
+            return float("nan")
+        s = str(v).strip()
+        s = re.sub(r"^[><≥≤＞＜≧≦＝=\s]+", "", s)
+        try:
+            return float(s)
+        except ValueError:
+            return float("nan")
+    return series.map(_clean)
+
+
 def run(crossval_dir: Path, clini_csv: Path, output_dir: Path, alpha: float = 0.5):
     """
     alpha: weight for WSI score (1-alpha for clinical score)
@@ -89,6 +104,11 @@ def run(crossval_dir: Path, clini_csv: Path, output_dir: Path, alpha: float = 0.
     output_dir.mkdir(parents=True, exist_ok=True)
     clini_df = pd.read_csv(clini_csv)
     clini_df["PATIENT"] = clini_df["PATIENT"].astype(str)
+
+    # Clean numeric columns that may contain comparison-operator strings (e.g. ＞60500)
+    for col in CLINICAL_CONT:
+        if col in clini_df.columns:
+            clini_df[col] = _parse_numeric(clini_df[col])
 
     # One-hot encode sex
     sex_map = {"男": 1, "女": 0, "M": 1, "F": 0, "male": 1, "female": 0}
