@@ -31,6 +31,7 @@ class ExtractorName(StrEnum):
     TICON = "ticon"
     EMPTY = "empty"
     RED_DINO = "red-dino"
+    PHIKON = "phikon"
 
 
 class PreprocessingConfig(BaseModel, arbitrary_types_allowed=True):

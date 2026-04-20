@@ -1,0 +1,20 @@
+# ============================================================
+# Exp10: Phikon feature extractor (Owkin, 2024)
+# iBOT ViT-B/16 trained on TCGA — potentially better TCGA generalization
+# since pretraining domain overlaps with external validation domain
+# ============================================================
+
+preprocessing:
+  output_dir: "/data3/chensx/STAMP/outputs/features/ourdata_phikon"
+
+  wsi_dir: "/data3/chensx/Ourdata/Slides"
+  extractor: "phikon"
+  device: "cuda"
+
+  cache_dir: "/data3/chensx/STAMP/outputs/cache/ourdata"
+  cache_tiles_ext: "jpg"
+
+  tile_size_um: 256.0
+  tile_size_px: 224
+  brightness_cutoff: 240
+  max_workers: 8

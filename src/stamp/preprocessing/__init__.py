@@ -229,6 +229,11 @@ def extract_(
 
             extractor = ticon()
 
+        case ExtractorName.PHIKON:
+            from stamp.preprocessing.extractor.phikon import phikon
+
+            extractor = phikon()
+
         case ExtractorName.EMPTY:
             from stamp.preprocessing.extractor.empty import empty
 
