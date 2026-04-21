@@ -1,7 +1,7 @@
 preprocessing:
   output_dir: "/data3/chensx/STAMP/outputs/features/tcga_phikon"
 
-  wsi_dir: "/data3/chensx/TCGA/Slides"
+  wsi_dir: "/data3/chensx/TCGA_LIHC_labeled/Slides"
   extractor: "phikon"
   device: "cuda"
 
