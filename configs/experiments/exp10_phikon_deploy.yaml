@@ -1,5 +1,5 @@
 deployment:
-  output_dir: "/data3/chensx/STAMP/deploy/exp10_phikon"
+  output_dir: "/data3/chensx/STAMP/outputs/deploy/exp10_phikon"
 
   clini_table: "/data3/chensx/STAMP/outputs/tables/tcga_clinical_filtered.csv"
   feature_dir: "/data3/chensx/STAMP/outputs/features/tcga_phikon"
