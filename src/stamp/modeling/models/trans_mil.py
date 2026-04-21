@@ -258,9 +258,11 @@ class Transformer(nn.Module):
 
     @jaxtyped(typechecker=beartype)
     def forward(
-        self, x: Float[Tensor, "batch tokens dim"]
+        self,
+        x: Float[Tensor, "batch tokens dim"],
+        mask: Bool[Tensor, "batch tokens"] | None = None,
     ) -> Float[Tensor, "batch tokens dim"]:
-        return x + self.attn(self.norm(x))
+        return x + self.attn(self.norm(x), mask=mask)
 
 
 class PPEG(nn.Module):
@@ -284,6 +286,8 @@ class PPEG(nn.Module):
 
 
 class TransMIL(nn.Module):
+    supports_padding_mask = True
+
     def __init__(self, dim_output: int, dim_input: int, dim_hidden: int):
         super().__init__()
         self.pos_layer = PPEG(dim=dim_hidden)
@@ -297,26 +301,69 @@ class TransMIL(nn.Module):
 
     @jaxtyped(typechecker=beartype)
     def forward(
-        self, h: Float[Tensor, "batch tiles dim_input"], **kwargs
+        self,
+        h: Float[Tensor, "batch tiles dim_input"],
+        mask: Bool[Tensor, "batch tiles"] | None = None,
+        **kwargs,
     ) -> Float[Tensor, "batch n_classes"]:
         # Project to lower dim
         h = self._fc1(h)  # [B, n, C]
+        valid_mask = None if mask is None else ~mask
 
         # Pad to square for reshaping
         H = h.shape[1]
         _H = _W = int(np.ceil(np.sqrt(H)))
         add_length = _H * _W - H
-        h = torch.cat([h, h[:, :add_length, :]], dim=1)  # [B, N, C]
+        if add_length > 0:
+            h = torch.cat(
+                [
+                    h,
+                    torch.zeros(
+                        h.shape[0],
+                        add_length,
+                        h.shape[2],
+                        device=h.device,
+                        dtype=h.dtype,
+                    ),
+                ],
+                dim=1,
+            )
+            if valid_mask is not None:
+                valid_mask = torch.cat(
+                    [
+                        valid_mask,
+                        torch.zeros(
+                            valid_mask.shape[0],
+                            add_length,
+                            device=valid_mask.device,
+                            dtype=valid_mask.dtype,
+                        ),
+                    ],
+                    dim=1,
+                )
 
         # Add class token
         B = h.shape[0]
         cls_tokens = self.cls_token.expand(B, -1, -1).to(h.device)
         h = torch.cat((cls_tokens, h), dim=1)
+        if valid_mask is not None:
+            valid_mask = torch.cat(
+                [
+                    torch.ones(
+                        valid_mask.shape[0],
+                        1,
+                        device=valid_mask.device,
+                        dtype=valid_mask.dtype,
+                    ),
+                    valid_mask,
+                ],
+                dim=1,
+            )
 
         # Transformer → Positional Encoding → Transformer
-        h = self.layer1(h)
+        h = self.layer1(h, mask=valid_mask)
         h = self.pos_layer(h, _H, _W)
-        h = self.layer2(h)
+        h = self.layer2(h, mask=valid_mask)
 
         # Class token output
         h = self.norm(h)[:, 0]

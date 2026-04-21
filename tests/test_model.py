@@ -1,6 +1,7 @@
 import torch
 
 from stamp.modeling.models.barspoon import EncDecTransformer
+from stamp.modeling.models.abmil import ABMIL
 from stamp.modeling.models.mlp import MLP
 from stamp.modeling.models.trans_mil import TransMIL
 from stamp.modeling.models.vision_tranformer import VisionTransformer
@@ -163,6 +164,34 @@ def test_trans_mil_inference_reproducibility(
         )
 
     assert logits1.allclose(logits2)
+
+
+def test_trans_mil_padding_mask_invariance() -> None:
+    model = TransMIL(dim_output=2, dim_input=16, dim_hidden=32).eval()
+
+    bags = torch.rand((1, 9, 16))
+    padded_bags = torch.cat([bags, torch.zeros((1, 7, 16))], dim=1)
+    mask = torch.tensor([[False] * 9 + [True] * 7])
+
+    with torch.inference_mode():
+        logits_ref = model(bags)
+        logits_padded = model(padded_bags, mask=mask)
+
+    assert torch.allclose(logits_ref, logits_padded, atol=1e-5)
+
+
+def test_abmil_padding_mask_invariance() -> None:
+    model = ABMIL(dim_input=16, dim_hidden=8, dim_output=2, dropout=0.0).eval()
+
+    bags = torch.rand((1, 5, 16))
+    padded_bags = torch.cat([bags, torch.zeros((1, 3, 16))], dim=1)
+    mask = torch.tensor([[False] * 5 + [True] * 3])
+
+    with torch.inference_mode():
+        logits_ref = model(bags)
+        logits_padded = model(padded_bags, mask=mask)
+
+    assert torch.allclose(logits_ref, logits_padded, atol=1e-6)
 
 
 def test_enc_dec_transformer_dims(
