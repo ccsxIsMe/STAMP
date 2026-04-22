@@ -23,8 +23,6 @@ class ABMIL(nn.Module):
         dropout:     Dropout on the patch projection.
     """
 
-    supports_padding_mask = True
-
     def __init__(
         self,
         dim_input: int,
@@ -49,7 +47,6 @@ class ABMIL(nn.Module):
     def forward(
         self,
         h: Float[Tensor, "batch tiles dim_input"],
-        mask: torch.Tensor | None = None,
         **kwargs,
     ) -> Float[Tensor, "batch dim_output"]:
         # h: (B, N, D)  →  project to hidden dim
@@ -59,8 +56,6 @@ class ABMIL(nn.Module):
         A_V = torch.tanh(self.attn_V(h))                  # (B, N, H)
         A_U = torch.sigmoid(self.attn_U(h))               # (B, N, H)
         A = self.attn_w(A_V * A_U)                        # (B, N, 1)
-        if mask is not None:
-            A = A.masked_fill(mask.unsqueeze(-1), torch.finfo(A.dtype).min)
         A = F.softmax(A, dim=1)                            # (B, N, 1)
 
         # Weighted sum → bag representation

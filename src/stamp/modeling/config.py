@@ -1,6 +1,7 @@
 import os
 from collections.abc import Sequence
 from pathlib import Path
+from typing import Literal
 
 import torch
 from pydantic import BaseModel, ConfigDict, Field
@@ -150,6 +151,8 @@ class AdvancedConfig(BaseModel):
     accelerator: str = "gpu" if torch.cuda.is_available() else "cpu"
     max_lr: float = 1e-4
     div_factor: float = 25.0
+    classification_loss: Literal["cross_entropy", "focal"] = "cross_entropy"
+    focal_gamma: float = Field(2.0, ge=0.0)
     model_name: ModelName | None = Field(
         default=None,
         description='Optional. "vit" or "mlp" are defaults based on feature type.',

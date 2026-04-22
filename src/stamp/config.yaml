@@ -325,6 +325,10 @@ advanced_config:
   # Determines the initial learning rate via initial_lr = max_lr/div_factor
   max_lr: 1e-4
   div_factor: 25. 
+  # Classification loss: "cross_entropy" (default) or "focal".
+  classification_loss: "cross_entropy"
+  # Focal-loss gamma. Only used when classification_loss == "focal".
+  focal_gamma: 2.0
   # Select a model regardless of task
   model_name: "vit" # or mlp, linear, trans_mil, barspoon
 

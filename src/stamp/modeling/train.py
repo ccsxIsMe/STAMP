@@ -199,6 +199,8 @@ def setup_model_for_training(
     common_params = {
         "categories": train_categories,
         "category_weights": category_weights,
+        "classification_loss": advanced.classification_loss,
+        "focal_gamma": advanced.focal_gamma,
         "dim_input": dim_feats,
         "total_steps": total_steps,
         "max_lr": advanced.max_lr,
@@ -317,6 +319,8 @@ def setup_model_from_dataloaders(
     common_params = {
         "categories": train_categories,
         "category_weights": category_weights,
+        "classification_loss": advanced.classification_loss,
+        "focal_gamma": advanced.focal_gamma,
         "dim_input": dim_feats,
         "total_steps": total_steps,
         "max_lr": advanced.max_lr,
@@ -522,10 +526,6 @@ def train_model_(
         monitor_metric, mode = "val_cindex", "max"
     else:  # regression or classification
         monitor_metric, mode = "validation_loss", "min"
-
-    _logger.info(
-        "Selecting checkpoints with monitor=%s (mode=%s)", monitor_metric, mode
-    )
 
     model_checkpoint = ModelCheckpoint(
         monitor=monitor_metric,

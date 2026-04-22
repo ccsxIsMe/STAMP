@@ -164,20 +164,17 @@ class _TileLevelMixin:
         ).repeat(len(bags), 1) >= bag_sizes.unsqueeze(1)
         return mask
 
-    def _use_padding_mask(self) -> bool:
-        return bool(getattr(self.model, "supports_padding_mask", False))
-
 
 class LitBaseClassifier(Base):
     """
     PyTorch Lightning wrapper for tile level and patient level clasification.
 
     This class encapsulates training, validation, testing, and prediction logic, along with:
-    - Masking logic that ensures only valid tiles (patches) participate in attention for backbones that support it
+    - Masking logic that ensures only valid tiles (patches) participate in attention during training (deactivated)
     - AUROC metric tracking during validation for multiclass classification.
     - Integration of class imbalance handling through weighted cross-entropy loss.
 
-    Padding masks are enabled only for backbones with cheap/native mask support.
+    The attention mask is currently deactivated to reduce memory usage.
 
     Args:
         model_class: model backbone
@@ -195,6 +192,8 @@ class LitBaseClassifier(Base):
         categories: Sequence[Category],
         category_weights: Float[Tensor, "category_weight"],  # noqa: F821
         dim_input: int,
+        classification_loss: str = "cross_entropy",
+        focal_gamma: float = 2.0,
         **kwargs,
     ) -> None:
         super().__init__(
@@ -217,11 +216,41 @@ class LitBaseClassifier(Base):
         )
 
         self.class_weights = category_weights
+        self.classification_loss = classification_loss
+        self.focal_gamma = focal_gamma
         self.valid_auroc = MulticlassAUROC(len(categories))
         # Number classes
         self.categories = list(categories)
 
         self.hparams.update({"task": "classification"})
+
+    def _compute_classification_loss(
+        self, logits: Tensor, targets: Tensor
+    ) -> Loss:
+        target_indices = targets.long().argmax(dim=-1)
+        log_probs = nn.functional.log_softmax(logits, dim=-1)
+        nll = nn.functional.nll_loss(
+            log_probs,
+            target_indices,
+            weight=self.class_weights.type_as(logits),
+            reduction="none",
+        )
+
+        if self.classification_loss == "cross_entropy":
+            return nll.mean()
+
+        if self.classification_loss == "focal":
+            target_log_probs = log_probs.gather(
+                dim=-1, index=target_indices.unsqueeze(-1)
+            ).squeeze(-1)
+            pt = target_log_probs.exp()
+            focal_weight = (1 - pt).pow(self.focal_gamma)
+            return (focal_weight * nll).mean()
+
+        raise ValueError(
+            f"Unknown classification loss: {self.classification_loss!r}. "
+            "Expected 'cross_entropy' or 'focal'."
+        )
 
 
 class LitTileClassifier(_TileLevelMixin, LitBaseClassifier):
@@ -254,11 +283,7 @@ class LitTileClassifier(_TileLevelMixin, LitBaseClassifier):
 
         logits = self.model(bags, coords=coords, mask=mask)
 
-        loss = nn.functional.cross_entropy(
-            logits,
-            targets.type_as(logits),
-            weight=self.class_weights.type_as(logits),
-        )
+        loss = self._compute_classification_loss(logits, targets)
 
         self.log(
             f"{step_name}_loss",
@@ -286,27 +311,21 @@ class LitTileClassifier(_TileLevelMixin, LitBaseClassifier):
         batch: tuple[Bags, CoordinatesBatch, BagSizes, EncodedTargets] | list[Tensor],
         batch_idx: int,
     ) -> Loss:
-        return self._step(
-            batch=batch, step_name="training", use_mask=self._use_padding_mask()
-        )
+        return self._step(batch=batch, step_name="training", use_mask=False)
 
     def validation_step(
         self,
         batch: tuple[Bags, CoordinatesBatch, BagSizes, EncodedTargets] | list[Tensor],
         batch_idx: int,
     ) -> Loss:
-        return self._step(
-            batch=batch, step_name="validation", use_mask=self._use_padding_mask()
-        )
+        return self._step(batch=batch, step_name="validation", use_mask=False)
 
     def test_step(
         self,
         batch: tuple[Bags, CoordinatesBatch, BagSizes, EncodedTargets] | list[Tensor],
         batch_idx: int,
     ) -> Loss:
-        return self._step(
-            batch=batch, step_name="test", use_mask=self._use_padding_mask()
-        )
+        return self._step(batch=batch, step_name="test", use_mask=False)
 
     def predict_step(
         self,
@@ -314,16 +333,12 @@ class LitTileClassifier(_TileLevelMixin, LitBaseClassifier):
         batch_idx: int,
     ) -> Float[Tensor, "batch logit"]:
         bags, coords, bag_sizes, _ = batch
-        mask = (
-            self._mask_from_bags(bags=bags, bag_sizes=bag_sizes)
-            if self._use_padding_mask()
-            else None
-        )
+        # adding a mask here will *drastically* and *unbearably* increase memory usage
         # Ensure input dtype matches model weights to avoid dtype-mismatch errors
         param_dtype = next(self.model.parameters()).dtype
         bags = bags.to(dtype=param_dtype)
         coords = coords.to(dtype=param_dtype)
-        return self.model(bags, coords=coords, mask=mask)
+        return self.model(bags, coords=coords, mask=None)
 
 
 class LitSlideClassifier(LitBaseClassifier):
@@ -339,11 +354,7 @@ class LitSlideClassifier(LitBaseClassifier):
     ) -> Loss:
         feats, targets = list(batch)  # Works for both tuple and list
         logits = self.model(feats.float())
-        loss = nn.functional.cross_entropy(
-            logits,
-            targets.type_as(logits),
-            weight=self.class_weights.type_as(logits),
-        )
+        loss = self._compute_classification_loss(logits, targets)
         self.log(
             f"{step_name}_loss",
             loss,
@@ -500,27 +511,21 @@ class LitTileRegressor(_TileLevelMixin, LitBaseRegressor):
         batch: tuple[Bags, CoordinatesBatch, BagSizes, EncodedTargets] | list[Tensor],
         batch_idx: int,
     ) -> Loss:
-        return self._step(
-            batch=batch, step_name="training", use_mask=self._use_padding_mask()
-        )
+        return self._step(batch=batch, step_name="training", use_mask=False)
 
     def validation_step(
         self,
         batch: tuple[Bags, CoordinatesBatch, BagSizes, EncodedTargets] | list[Tensor],
         batch_idx: int,
     ) -> Loss:
-        return self._step(
-            batch=batch, step_name="validation", use_mask=self._use_padding_mask()
-        )
+        return self._step(batch=batch, step_name="validation", use_mask=False)
 
     def test_step(
         self,
         batch: tuple[Bags, CoordinatesBatch, BagSizes, EncodedTargets] | list[Tensor],
         batch_idx: int,
     ) -> Loss:
-        return self._step(
-            batch=batch, step_name="test", use_mask=self._use_padding_mask()
-        )
+        return self._step(batch=batch, step_name="test", use_mask=False)
 
     def predict_step(
         self,
@@ -528,12 +533,8 @@ class LitTileRegressor(_TileLevelMixin, LitBaseRegressor):
         batch_idx: int,
     ) -> Float[Tensor, "batch 1"]:
         bags, coords, bag_sizes, _ = batch
-        mask = (
-            self._mask_from_bags(bags=bags, bag_sizes=bag_sizes)
-            if self._use_padding_mask()
-            else None
-        )
-        return self.model(bags, coords=coords, mask=mask)
+        # keep memory usage low as in classifier
+        return self.model(bags, coords=coords, mask=None)
 
 
 class LitSlideRegressor(LitBaseRegressor):
@@ -777,12 +778,7 @@ class LitTileSurvival(_TileLevelMixin, LitSurvivalBase):
         batch_idx: int,
     ) -> Loss:
         bags, coords, bag_sizes, targets = batch
-        mask = (
-            self._mask_from_bags(bags=bags, bag_sizes=bag_sizes)
-            if self._use_padding_mask()
-            else None
-        )
-        preds = self.model(bags, coords=coords, mask=mask)
+        preds = self.model(bags, coords=coords, mask=None)
         y = targets.to(preds.device, dtype=torch.float32)
         times, events = y[:, 0], y[:, 1]
 
@@ -809,12 +805,7 @@ class LitTileSurvival(_TileLevelMixin, LitSurvivalBase):
         batch_idx: int,
     ) -> Any:
         bags, coords, bag_sizes, targets = batch
-        mask = (
-            self._mask_from_bags(bags=bags, bag_sizes=bag_sizes)
-            if self._use_padding_mask()
-            else None
-        )
-        preds = self.model(bags, coords=coords, mask=mask).squeeze(-1)
+        preds = self.model(bags, coords=coords, mask=None).squeeze(-1)
 
         y = targets.to(preds.device, dtype=torch.float32)
         times, events = y[:, 0], y[:, 1]
@@ -830,12 +821,7 @@ class LitTileSurvival(_TileLevelMixin, LitSurvivalBase):
         batch_idx: int,
     ) -> Float[Tensor, "batch 1"]:
         bags, coords, bag_sizes, survival_target = batch
-        mask = (
-            self._mask_from_bags(bags=bags, bag_sizes=bag_sizes)
-            if self._use_padding_mask()
-            else None
-        )
-        return self.model(bags, coords=coords, mask=mask)
+        return self.model(bags, coords=coords, mask=None)
 
 
 class LitSlideSurvival(LitSurvivalBase):
