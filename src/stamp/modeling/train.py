@@ -516,14 +516,11 @@ def train_model_(
     """
     torch.set_float32_matmul_precision("high")
 
-    # Decide monitor metric based on task. For single-target classification we
-    # select checkpoints by AUROC, which is the primary research metric.
+    # Decide monitor metric based on task.
     task = getattr(model.hparams, "task", None)
     if task == "survival":
         monitor_metric, mode = "val_cindex", "max"
-    elif task == "classification" and hasattr(model, "valid_auroc"):
-        monitor_metric, mode = "validation_auroc", "max"
-    else:  # regression or classification heads without a single AUROC metric
+    else:  # regression or classification
         monitor_metric, mode = "validation_loss", "min"
 
     _logger.info(
