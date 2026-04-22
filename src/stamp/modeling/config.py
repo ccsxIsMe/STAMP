@@ -151,6 +151,7 @@ class AdvancedConfig(BaseModel):
     accelerator: str = "gpu" if torch.cuda.is_available() else "cpu"
     max_lr: float = 1e-4
     div_factor: float = 25.0
+    use_class_weights: bool = True
     classification_loss: Literal["cross_entropy", "focal"] = "cross_entropy"
     focal_gamma: float = Field(2.0, ge=0.0)
     model_name: ModelName | None = Field(

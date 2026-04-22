@@ -190,7 +190,7 @@ class LitBaseClassifier(Base):
         model_class: type[nn.Module],
         ground_truth_label: PandasLabel,
         categories: Sequence[Category],
-        category_weights: Float[Tensor, "category_weight"],  # noqa: F821
+        category_weights: Float[Tensor, "category_weight"] | list,  # noqa: F821
         dim_input: int,
         classification_loss: str = "cross_entropy",
         focal_gamma: float = 2.0,
@@ -206,7 +206,7 @@ class LitBaseClassifier(Base):
         )
         self.ground_truth_label = ground_truth_label
 
-        if len(categories) != len(category_weights):
+        if category_weights and len(categories) != len(category_weights):
             raise ValueError(
                 "the number of category weights has to match the number of categories!"
             )
@@ -215,7 +215,9 @@ class LitBaseClassifier(Base):
             model_class, dim_input, len(categories), kwargs
         )
 
-        self.class_weights = category_weights
+        self.class_weights = (
+            category_weights if isinstance(category_weights, Tensor) else None
+        )
         self.classification_loss = classification_loss
         self.focal_gamma = focal_gamma
         self.valid_auroc = MulticlassAUROC(len(categories))
@@ -232,7 +234,11 @@ class LitBaseClassifier(Base):
         nll = nn.functional.nll_loss(
             log_probs,
             target_indices,
-            weight=self.class_weights.type_as(logits),
+            weight=(
+                self.class_weights.type_as(logits)
+                if self.class_weights is not None
+                else None
+            ),
             reduction="none",
         )
 

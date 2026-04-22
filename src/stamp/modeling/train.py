@@ -141,7 +141,7 @@ def setup_model_for_training(
     )
     ##temopary for test regression
     category_weights = []
-    if task == "classification":
+    if task == "classification" and advanced.use_class_weights:
         category_weights = _compute_class_weights_and_check_categories(
             train_dl=train_dl,
             feature_type=feature_type,
@@ -261,7 +261,7 @@ def setup_model_from_dataloaders(
     )
 
     category_weights: torch.Tensor | dict[str, torch.Tensor] | list = []
-    if task == "classification":
+    if task == "classification" and advanced.use_class_weights:
         category_weights = _compute_class_weights_and_check_categories(
             train_dl=train_dl,
             feature_type=feature_type,
