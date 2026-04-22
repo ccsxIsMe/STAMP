@@ -1,0 +1,36 @@
+# ============================================================
+# Exp01: TransMIL model (baseline uses ViT)
+# Change: model_name vit -> trans_mil
+# TransMIL (Shao et al. NeurIPS 2021): correlated local morphology
+# and long-range spatial interaction via Nyströmformer
+# Hypothesis: TransMIL captures spatial correlations better for HCC
+# ============================================================
+
+crossval:
+  output_dir: "/data3/chensx/STAMP/outputs/crossval/exp01_transmil_maskonly"
+
+  clini_table: "/data3/chensx/STAMP/outputs/tables/ourdata_clinical_merged.csv"
+  feature_dir: "/data3/chensx/STAMP/outputs/features/ourdata_conch1_5"
+  slide_table:  "/data3/chensx/STAMP/outputs/tables/ourdata_slide_table.csv"
+
+  task: "classification"
+  ground_truth_label: "Early recurrence"
+  categories: ["0", "1"]
+  patient_label: "PATIENT"
+  filename_label: "FILENAME"
+  n_splits: 5
+
+advanced_config:
+  seed: 42
+  max_epochs: 32
+  patience: 16
+  batch_size: 64
+  bag_size: 512
+  max_lr: 1e-4
+  div_factor: 25.0
+
+  model_name: "trans_mil"   # <-- only change vs baseline
+
+  model_params:
+    trans_mil:
+      dim_hidden: 512
