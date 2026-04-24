@@ -207,7 +207,12 @@ class LitBaseClassifier(Base):
         )
         self.ground_truth_label = ground_truth_label
 
-        if category_weights and len(categories) != len(category_weights):
+        if isinstance(category_weights, Tensor):
+            if len(categories) != len(category_weights):
+                raise ValueError(
+                    "the number of category weights has to match the number of categories!"
+                )
+        elif category_weights and len(categories) != len(category_weights):
             raise ValueError(
                 "the number of category weights has to match the number of categories!"
             )
