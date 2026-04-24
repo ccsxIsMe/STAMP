@@ -1,0 +1,42 @@
+# ============================================================
+# Exp01: TransMIL + task-adaptive feature adapter
+# Goal: learn a stronger task-specific transformation on top of
+# frozen CONCH1.5 tile features before MIL aggregation.
+# ============================================================
+
+crossval:
+  output_dir: "/data3/chensx/STAMP/outputs/crossval/exp01_transmil_adapter"
+
+  clini_table: "/data3/chensx/STAMP/outputs/tables/ourdata_clinical_merged.csv"
+  feature_dir: "/data3/chensx/STAMP/outputs/features/ourdata_conch1_5"
+  slide_table: "/data3/chensx/STAMP/outputs/tables/ourdata_slide_table.csv"
+
+  task: "classification"
+  ground_truth_label: "Early recurrence"
+  categories: ["0", "1"]
+  patient_label: "PATIENT"
+  filename_label: "FILENAME"
+  n_splits: 5
+
+advanced_config:
+  seed: 42
+  max_epochs: 32
+  patience: 16
+  batch_size: 64
+  bag_size: 512
+  max_lr: 1e-4
+  div_factor: 25.0
+  use_class_weights: true
+  classification_loss: "cross_entropy"
+  label_smoothing: 0.0
+
+  model_name: "trans_mil"
+
+  model_params:
+    trans_mil:
+      dim_hidden: 512
+      feature_adapter_depth: 2
+      feature_adapter_hidden_dim: 1024
+      feature_adapter_dropout: 0.1
+      feature_adapter_input_layernorm: true
+      feature_adapter_layerscale_init: 0.001

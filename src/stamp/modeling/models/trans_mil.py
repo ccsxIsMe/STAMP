@@ -283,11 +283,74 @@ class PPEG(nn.Module):
         return x
 
 
+class ResidualFeatureAdapterBlock(nn.Module):
+    def __init__(
+        self,
+        dim: int,
+        hidden_dim: int,
+        dropout: float = 0.0,
+        layer_scale_init: float = 1e-3,
+    ):
+        super().__init__()
+        self.norm = nn.LayerNorm(dim)
+        self.fc1 = nn.Linear(dim, hidden_dim)
+        self.act = nn.GELU()
+        self.dropout = nn.Dropout(dropout)
+        self.fc2 = nn.Linear(hidden_dim, dim)
+        self.layer_scale = nn.Parameter(torch.full((dim,), layer_scale_init))
+
+    @jaxtyped(typechecker=beartype)
+    def forward(
+        self, x: Float[Tensor, "batch tokens dim"]
+    ) -> Float[Tensor, "batch tokens dim"]:
+        residual = self.fc2(self.dropout(self.act(self.fc1(self.norm(x)))))
+        residual = self.dropout(residual)
+        return x + residual * self.layer_scale
+
+
 class TransMIL(nn.Module):
-    def __init__(self, dim_output: int, dim_input: int, dim_hidden: int):
+    def __init__(
+        self,
+        dim_output: int,
+        dim_input: int,
+        dim_hidden: int,
+        feature_adapter_depth: int = 0,
+        feature_adapter_hidden_dim: int | None = None,
+        feature_adapter_dropout: float = 0.0,
+        feature_adapter_input_layernorm: bool = False,
+        feature_adapter_layerscale_init: float = 1e-3,
+    ):
         super().__init__()
         self.pos_layer = PPEG(dim=dim_hidden)
-        self._fc1 = nn.Sequential(nn.Linear(dim_input, dim_hidden), nn.ReLU())
+        adapter_hidden_dim = feature_adapter_hidden_dim or dim_hidden * 2
+
+        if feature_adapter_depth > 0:
+            projection_layers: list[nn.Module] = []
+            if feature_adapter_input_layernorm:
+                projection_layers.append(nn.LayerNorm(dim_input))
+            projection_layers.extend(
+                [
+                    nn.Linear(dim_input, dim_hidden),
+                    nn.GELU(),
+                    nn.Dropout(feature_adapter_dropout),
+                ]
+            )
+            self._fc1 = nn.Sequential(*projection_layers)
+            self.feature_adapter = nn.Sequential(
+                *[
+                    ResidualFeatureAdapterBlock(
+                        dim=dim_hidden,
+                        hidden_dim=adapter_hidden_dim,
+                        dropout=feature_adapter_dropout,
+                        layer_scale_init=feature_adapter_layerscale_init,
+                    )
+                    for _ in range(feature_adapter_depth)
+                ]
+            )
+        else:
+            self._fc1 = nn.Sequential(nn.Linear(dim_input, dim_hidden), nn.ReLU())
+            self.feature_adapter = nn.Identity()
+
         self.cls_token = nn.Parameter(torch.randn(1, 1, dim_hidden))
         self.n_classes = dim_output
         self.layer1 = Transformer(dim=dim_hidden)
@@ -301,6 +364,7 @@ class TransMIL(nn.Module):
     ) -> Float[Tensor, "batch n_classes"]:
         # Project to lower dim
         h = self._fc1(h)  # [B, n, C]
+        h = self.feature_adapter(h)
 
         # Pad to square for reshaping
         H = h.shape[1]

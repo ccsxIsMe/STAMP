@@ -164,6 +164,70 @@ def test_trans_mil_inference_reproducibility(
 
     assert logits1.allclose(logits2)
 
+
+def test_trans_mil_with_feature_adapter_dims(
+    num_classes: int = 2,
+    batch_size: int = 4,
+    n_tiles: int = 81,
+    input_dim: int = 512,
+    dim_hidden: int = 256,
+) -> None:
+    model = TransMIL(
+        dim_output=num_classes,
+        dim_input=input_dim,
+        dim_hidden=dim_hidden,
+        feature_adapter_depth=2,
+        feature_adapter_hidden_dim=384,
+        feature_adapter_dropout=0.1,
+        feature_adapter_input_layernorm=True,
+    )
+
+    bags = torch.rand((batch_size, n_tiles, input_dim))
+    coords = torch.rand((batch_size, n_tiles, 2))
+    mask = torch.rand((batch_size, n_tiles)) > 0.5
+    logits = model.forward(bags, coords=coords, mask=mask)
+    assert logits.shape == (batch_size, num_classes)
+
+
+def test_trans_mil_with_feature_adapter_inference_reproducibility(
+    num_classes: int = 2,
+    batch_size: int = 3,
+    n_tiles: int = 64,
+    input_dim: int = 384,
+    dim_hidden: int = 192,
+) -> None:
+    model = TransMIL(
+        dim_output=num_classes,
+        dim_input=input_dim,
+        dim_hidden=dim_hidden,
+        feature_adapter_depth=3,
+        feature_adapter_hidden_dim=320,
+        feature_adapter_dropout=0.15,
+        feature_adapter_input_layernorm=True,
+    )
+    model = model.eval()
+
+    bags = torch.rand((batch_size, n_tiles, input_dim))
+    coords = torch.rand((batch_size, n_tiles, 2))
+    mask = (
+        torch.arange(n_tiles).to(device=bags.device).unsqueeze(0).repeat(batch_size, 1)
+    ) >= torch.randint(1, n_tiles, (batch_size, 1))
+
+    with torch.inference_mode():
+        logits1 = model.forward(
+            bags,
+            coords=coords,
+            mask=mask,
+        )
+        logits2 = model.forward(
+            bags,
+            coords=coords,
+            mask=mask,
+        )
+
+    assert logits1.allclose(logits2)
+
+
 def test_enc_dec_transformer_dims(
     batch_size: int = 6,
     n_tiles: int = 75,

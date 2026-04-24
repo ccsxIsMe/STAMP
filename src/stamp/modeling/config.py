@@ -98,6 +98,11 @@ class MlpModelParams(BaseModel):
 class TransMILModelParams(BaseModel):
     model_config = ConfigDict(extra="forbid")
     dim_hidden: int = 512
+    feature_adapter_depth: int = Field(0, ge=0)
+    feature_adapter_hidden_dim: int | None = Field(default=None, ge=1)
+    feature_adapter_dropout: float = Field(0.0, ge=0.0, lt=1.0)
+    feature_adapter_input_layernorm: bool = False
+    feature_adapter_layerscale_init: float = Field(1e-3, ge=0.0)
 
 
 class AbmilModelParams(BaseModel):

@@ -132,6 +132,14 @@ def test_config_parsing() -> None:
                         "num_layers": 2,
                         "dropout": 0.25,
                     },
+                    "trans_mil": {
+                        "dim_hidden": 512,
+                        "feature_adapter_depth": 2,
+                        "feature_adapter_hidden_dim": 1024,
+                        "feature_adapter_dropout": 0.1,
+                        "feature_adapter_input_layernorm": True,
+                        "feature_adapter_layerscale_init": 0.001,
+                    },
                 },
             },
         }
@@ -256,7 +264,14 @@ def test_config_parsing() -> None:
                     num_layers=2,
                     dropout=0.25,
                 ),
-                trans_mil=TransMILModelParams(dim_hidden=512),
+                trans_mil=TransMILModelParams(
+                    dim_hidden=512,
+                    feature_adapter_depth=2,
+                    feature_adapter_hidden_dim=1024,
+                    feature_adapter_dropout=0.1,
+                    feature_adapter_input_layernorm=True,
+                    feature_adapter_layerscale_init=0.001,
+                ),
             ),
         ),
     )

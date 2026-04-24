@@ -348,6 +348,13 @@ advanced_config:
 
     trans_mil: # https://arxiv.org/abs/2106.00908
       dim_hidden: 512
+      # Optional task-adaptive tile feature re-embedding before MIL aggregation.
+      feature_adapter_depth: 0
+      # Defaults to 2 * dim_hidden when left null.
+      #feature_adapter_hidden_dim: 1024
+      feature_adapter_dropout: 0.0
+      feature_adapter_input_layernorm: false
+      feature_adapter_layerscale_init: 0.001
 
     mlp: # Multilayer Perceptron
       dim_hidden: 512
