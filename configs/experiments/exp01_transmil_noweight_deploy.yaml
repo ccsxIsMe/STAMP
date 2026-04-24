@@ -1,0 +1,17 @@
+deployment:
+  output_dir: "/data3/chensx/STAMP/outputs/deploy/exp01_transmil_noweight"
+
+  clini_table: "/data3/chensx/STAMP/outputs/tables/tcga_clinical_filtered.csv"
+  feature_dir: "/data3/chensx/STAMP/outputs/features/tcga_conch1_5"
+  slide_table:  "/data3/chensx/STAMP/outputs/tables/tcga_slide_table.csv"
+
+  ground_truth_label: "Early recurrence"
+  patient_label: "PATIENT"
+  filename_label: "FILENAME"
+
+  checkpoint_paths:
+  - "/data3/chensx/STAMP/outputs/crossval/exp01_transmil_noweight/split-0/model.ckpt"
+  - "/data3/chensx/STAMP/outputs/crossval/exp01_transmil_noweight/split-1/model.ckpt"
+  - "/data3/chensx/STAMP/outputs/crossval/exp01_transmil_noweight/split-2/model.ckpt"
+  - "/data3/chensx/STAMP/outputs/crossval/exp01_transmil_noweight/split-3/model.ckpt"
+  - "/data3/chensx/STAMP/outputs/crossval/exp01_transmil_noweight/split-4/model.ckpt"
