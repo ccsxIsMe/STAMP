@@ -329,6 +329,8 @@ advanced_config:
   use_class_weights: true
   # Classification loss: "cross_entropy" (default) or "focal".
   classification_loss: "cross_entropy"
+  # Label smoothing for cross-entropy classification. A good first value to try is 0.05.
+  label_smoothing: 0.0
   # Focal-loss gamma. Only used when classification_loss == "focal".
   focal_gamma: 2.0
   # Select a model regardless of task

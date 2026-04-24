@@ -153,6 +153,7 @@ class AdvancedConfig(BaseModel):
     div_factor: float = 25.0
     use_class_weights: bool = True
     classification_loss: Literal["cross_entropy", "focal"] = "cross_entropy"
+    label_smoothing: float = Field(0.0, ge=0.0, lt=1.0)
     focal_gamma: float = Field(2.0, ge=0.0)
     model_name: ModelName | None = Field(
         default=None,

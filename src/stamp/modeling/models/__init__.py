@@ -193,6 +193,7 @@ class LitBaseClassifier(Base):
         category_weights: Float[Tensor, "category_weight"] | list,  # noqa: F821
         dim_input: int,
         classification_loss: str = "cross_entropy",
+        label_smoothing: float = 0.0,
         focal_gamma: float = 2.0,
         **kwargs,
     ) -> None:
@@ -219,10 +220,18 @@ class LitBaseClassifier(Base):
             category_weights if isinstance(category_weights, Tensor) else None
         )
         self.classification_loss = classification_loss
+        self.label_smoothing = label_smoothing
         self.focal_gamma = focal_gamma
+        self.train_auroc = MulticlassAUROC(len(categories))
         self.valid_auroc = MulticlassAUROC(len(categories))
+        self.test_auroc = MulticlassAUROC(len(categories))
         # Number classes
         self.categories = list(categories)
+
+        if self.classification_loss == "focal" and self.label_smoothing > 0:
+            raise ValueError(
+                "label_smoothing is only supported with classification_loss='cross_entropy'."
+            )
 
         self.hparams.update({"task": "classification"})
 
@@ -230,20 +239,27 @@ class LitBaseClassifier(Base):
         self, logits: Tensor, targets: Tensor
     ) -> Loss:
         target_indices = targets.long().argmax(dim=-1)
+        weight = (
+            self.class_weights.type_as(logits)
+            if self.class_weights is not None
+            else None
+        )
+
+        if self.classification_loss == "cross_entropy":
+            return nn.functional.cross_entropy(
+                logits,
+                target_indices,
+                weight=weight,
+                label_smoothing=self.label_smoothing,
+            )
+
         log_probs = nn.functional.log_softmax(logits, dim=-1)
         nll = nn.functional.nll_loss(
             log_probs,
             target_indices,
-            weight=(
-                self.class_weights.type_as(logits)
-                if self.class_weights is not None
-                else None
-            ),
+            weight=weight,
             reduction="none",
         )
-
-        if self.classification_loss == "cross_entropy":
-            return nll.mean()
 
         if self.classification_loss == "focal":
             target_log_probs = log_probs.gather(
@@ -300,11 +316,29 @@ class LitTileClassifier(_TileLevelMixin, LitBaseClassifier):
             sync_dist=True,
         )
 
-        if step_name == "validation":
+        if step_name == "training":
+            self.train_auroc.update(logits, targets.long().argmax(dim=-1))
+            self.log(
+                f"{step_name}_auroc",
+                self.train_auroc,
+                on_step=False,
+                on_epoch=True,
+                sync_dist=True,
+            )
+        elif step_name == "validation":
             self.valid_auroc.update(logits, targets.long().argmax(dim=-1))
             self.log(
                 f"{step_name}_auroc",
                 self.valid_auroc,
+                on_step=False,
+                on_epoch=True,
+                sync_dist=True,
+            )
+        elif step_name == "test":
+            self.test_auroc.update(logits, targets.long().argmax(dim=-1))
+            self.log(
+                f"{step_name}_auroc",
+                self.test_auroc,
                 on_step=False,
                 on_epoch=True,
                 sync_dist=True,
@@ -369,11 +403,29 @@ class LitSlideClassifier(LitBaseClassifier):
             prog_bar=True,
             sync_dist=True,
         )
-        if step_name == "validation":
+        if step_name == "training":
+            self.train_auroc.update(logits, targets.long().argmax(dim=-1))
+            self.log(
+                f"{step_name}_auroc",
+                self.train_auroc,
+                on_step=False,
+                on_epoch=True,
+                sync_dist=True,
+            )
+        elif step_name == "validation":
             self.valid_auroc.update(logits, targets.long().argmax(dim=-1))
             self.log(
                 f"{step_name}_auroc",
                 self.valid_auroc,
+                on_step=False,
+                on_epoch=True,
+                sync_dist=True,
+            )
+        elif step_name == "test":
+            self.test_auroc.update(logits, targets.long().argmax(dim=-1))
+            self.log(
+                f"{step_name}_auroc",
+                self.test_auroc,
                 on_step=False,
                 on_epoch=True,
                 sync_dist=True,
