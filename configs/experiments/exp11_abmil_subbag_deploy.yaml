@@ -1,0 +1,22 @@
+deployment:
+  output_dir: "/data3/chensx/STAMP/outputs/deploy/exp11_abmil_subbag"
+
+  clini_table: "/data3/chensx/STAMP/outputs/tables/tcga_clinical_filtered.csv"
+  feature_dir: "/data3/chensx/STAMP/outputs/features/tcga_conch1_5"
+  slide_table: "/data3/chensx/STAMP/outputs/tables/tcga_slide_table.csv"
+
+  ground_truth_label: "Early recurrence"
+  patient_label: "PATIENT"
+  filename_label: "FILENAME"
+
+  # Match training-time bag size and average multiple random sub-bag predictions.
+  bag_size: 512
+  sample_count: 8
+  random_sampling: true
+
+  checkpoint_paths:
+    - "/data3/chensx/STAMP/outputs/crossval/exp01_abmil/split-0/model.ckpt"
+    - "/data3/chensx/STAMP/outputs/crossval/exp01_abmil/split-1/model.ckpt"
+    - "/data3/chensx/STAMP/outputs/crossval/exp01_abmil/split-2/model.ckpt"
+    - "/data3/chensx/STAMP/outputs/crossval/exp01_abmil/split-3/model.ckpt"
+    - "/data3/chensx/STAMP/outputs/crossval/exp01_abmil/split-4/model.ckpt"

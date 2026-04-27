@@ -92,6 +92,7 @@ def tile_bag_dataloader(
     shuffle: bool,
     num_workers: int,
     transform: Callable[[Tensor], Tensor] | None,
+    deterministic_sampling: bool | None = None,
 ) -> tuple[
     DataLoader[tuple[Bags, CoordinatesBatch, BagSizes, EncodedTargets]],
     Sequence[Category] | Mapping[str, Sequence[Category]],
@@ -122,7 +123,11 @@ def tile_bag_dataloader(
         bag_size=bag_size,
         ground_truths=targets,
         transform=transform,
-        deterministic=(not shuffle),
+        deterministic=(
+            deterministic_sampling
+            if deterministic_sampling is not None
+            else (not shuffle)
+        ),
     )
     dl = DataLoader(
         ds,
@@ -329,6 +334,7 @@ def create_dataloader(
     num_workers: int,
     transform: Callable[[Tensor], Tensor] | None,
     categories: Sequence[Category] | Mapping[str, Sequence[Category]] | None = None,
+    deterministic_sampling: bool | None = None,
 ) -> tuple[DataLoader, Sequence[Category] | Mapping[str, Sequence[Category]]]:
     """Unified dataloader for all feature types and tasks."""
     if feature_type == "tile":
@@ -351,6 +357,7 @@ def create_dataloader(
             shuffle=shuffle,
             num_workers=num_workers,
             transform=transform,
+            deterministic_sampling=deterministic_sampling,
         )
     elif feature_type in {"slide", "patient"}:
         # For slide/patient-level: single feature vector per entry

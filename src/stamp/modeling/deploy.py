@@ -70,6 +70,9 @@ def deploy_categorical_model_(
     status_label: PandasLabel | None,
     patient_label: PandasLabel,
     filename_label: PandasLabel,
+    bag_size: int | None,
+    sample_count: int,
+    random_sampling: bool,
     num_workers: int,
     accelerator: str | Accelerator,
 ) -> None:
@@ -264,12 +267,13 @@ def deploy_categorical_model_(
         feature_type=feature_type,
         task=task,
         patient_data=list(patient_to_data.values()),
-        bag_size=None,
+        bag_size=bag_size,
         batch_size=1,
         shuffle=False,
         num_workers=num_workers,
         transform=None,
         categories=model_categories,
+        deterministic_sampling=(not random_sampling),
     )
 
     df_builder = {
@@ -303,6 +307,7 @@ def deploy_categorical_model_(
             test_dl=test_dl,
             patient_ids=patient_ids,
             accelerator=accelerator,
+            prediction_iterations=sample_count,
         )
         all_predictions.append(predictions)
 
@@ -392,6 +397,7 @@ def _predict(
     test_dl: torch.utils.data.DataLoader,
     patient_ids: Sequence[PatientId],
     accelerator: str | Accelerator,
+    prediction_iterations: int = 1,
 ) -> PredictionsType:
     model = model.eval()
     torch.set_float32_matmul_precision("medium")
@@ -403,56 +409,84 @@ def _predict(
         devices=1,  # Needs to be 1, otherwise half the predictions are missing for some reason
         logger=False,
     )
+    all_run_predictions: list[PredictionsType] = []
 
-    outs = trainer.predict(model, test_dl)
+    for _ in range(prediction_iterations):
+        outs = trainer.predict(model, test_dl)
 
-    if not outs:
-        return {}
+        if not outs:
+            return {}
 
-    first = outs[0]
+        first = outs[0]
 
-    # Multi-target case: each element of outs is a dict[target_label -> tensor]
-    if isinstance(first, dict):
-        per_target_lists: dict[str, list[torch.Tensor]] = {}
-        for out in outs:
-            if not isinstance(out, dict):
-                raise RuntimeError("Mixed prediction output types from model")
-            for k, v in out.items():
-                per_target_lists.setdefault(k, []).append(v)
+        # Multi-target case: each element of outs is a dict[target_label -> tensor]
+        if isinstance(first, dict):
+            per_target_lists: dict[str, list[torch.Tensor]] = {}
+            for out in outs:
+                if not isinstance(out, dict):
+                    raise RuntimeError("Mixed prediction output types from model")
+                for k, v in out.items():
+                    per_target_lists.setdefault(k, []).append(v)
 
-        per_target_tensors: dict[str, torch.Tensor] = {
-            k: torch.cat(vlist, dim=0) for k, vlist in per_target_lists.items()
-        }
-
-        if getattr(model.hparams, "task", None) == "classification":
-            for k in list(per_target_tensors.keys()):
-                per_target_tensors[k] = torch.softmax(per_target_tensors[k], dim=1)
-
-        # build per-patient dicts
-        num_preds = next(iter(per_target_tensors.values())).shape[0]
-        predictions: dict[PatientId, dict[str, torch.Tensor]] = {}
-        for i, pid in enumerate(patient_ids[:num_preds]):
-            predictions[pid] = {
-                k: per_target_tensors[k][i] for k in per_target_tensors.keys()
+            per_target_tensors: dict[str, torch.Tensor] = {
+                k: torch.cat(vlist, dim=0) for k, vlist in per_target_lists.items()
             }
 
-        return predictions
+            if getattr(model.hparams, "task", None) == "classification":
+                for k in list(per_target_tensors.keys()):
+                    per_target_tensors[k] = torch.softmax(per_target_tensors[k], dim=1)
 
-    # Single-target case: each element of outs is a tensor
-    outs_single = cast(list[torch.Tensor], outs)
+            run_predictions: dict[PatientId, dict[str, torch.Tensor]] = {}
+            num_preds = next(iter(per_target_tensors.values())).shape[0]
+            for i, pid in enumerate(patient_ids[:num_preds]):
+                run_predictions[pid] = {
+                    k: per_target_tensors[k][i] for k in per_target_tensors.keys()
+                }
+            all_run_predictions.append(run_predictions)
+            continue
 
-    raw_preds = torch.cat(outs_single, dim=0)
+        # Single-target case: each element of outs is a tensor
+        outs_single = cast(list[torch.Tensor], outs)
+        raw_preds = torch.cat(outs_single, dim=0)
 
-    if getattr(model.hparams, "task", None) == "classification":
-        raw_preds = torch.softmax(raw_preds, dim=1)
-    elif getattr(model.hparams, "task", None) == "survival":
-        raw_preds = raw_preds.squeeze(-1)
+        if getattr(model.hparams, "task", None) == "classification":
+            raw_preds = torch.softmax(raw_preds, dim=1)
+        elif getattr(model.hparams, "task", None) == "survival":
+            raw_preds = raw_preds.squeeze(-1)
 
-    result: dict[PatientId, torch.Tensor] = {
-        pid: raw_preds[i] for i, pid in enumerate(patient_ids)
-    }
+        run_predictions = {
+            pid: raw_preds[i] for i, pid in enumerate(patient_ids)
+        }
+        all_run_predictions.append(run_predictions)
 
-    return result
+    if prediction_iterations == 1:
+        return all_run_predictions[0]
+
+    first_run_first_pred = next(iter(all_run_predictions[0].values()))
+    if isinstance(first_run_first_pred, dict):
+        averaged_predictions: dict[PatientId, dict[str, torch.Tensor]] = {}
+        for pid in patient_ids:
+            target_names = cast(dict[str, torch.Tensor], all_run_predictions[0][pid]).keys()
+            averaged_predictions[pid] = {
+                target_name: torch.stack(
+                    [
+                        cast(dict[str, torch.Tensor], run_predictions[pid])[target_name]
+                        for run_predictions in all_run_predictions
+                    ]
+                ).mean(dim=0)
+                for target_name in target_names
+            }
+        return averaged_predictions
+
+    averaged_single_predictions: dict[PatientId, torch.Tensor] = {}
+    for pid in patient_ids:
+        averaged_single_predictions[pid] = torch.stack(
+            [
+                cast(dict[PatientId, torch.Tensor], run_predictions)[pid]
+                for run_predictions in all_run_predictions
+            ]
+        ).mean(dim=0)
+    return averaged_single_predictions
 
 
 def _to_prediction_df(

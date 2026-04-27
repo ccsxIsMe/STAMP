@@ -1,0 +1,12 @@
+statistics:
+  output_dir: "/data3/chensx/STAMP/outputs/stats/exp11_abmil_subbag"
+  task: "classification"
+  ground_truth_label: "Early recurrence"
+  true_class: "1"
+
+  pred_csvs:
+    - "/data3/chensx/STAMP/outputs/crossval/exp11_abmil_subbag/split-0/patient-preds.csv"
+    - "/data3/chensx/STAMP/outputs/crossval/exp11_abmil_subbag/split-1/patient-preds.csv"
+    - "/data3/chensx/STAMP/outputs/crossval/exp11_abmil_subbag/split-2/patient-preds.csv"
+    - "/data3/chensx/STAMP/outputs/crossval/exp11_abmil_subbag/split-3/patient-preds.csv"
+    - "/data3/chensx/STAMP/outputs/crossval/exp11_abmil_subbag/split-4/patient-preds.csv"

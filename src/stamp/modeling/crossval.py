@@ -240,12 +240,13 @@ def categorical_crossval_(
                 feature_type=feature_type,
                 task=config.task,
                 patient_data=test_patient_data,
-                bag_size=None,
+                bag_size=advanced.eval_bag_size,
                 batch_size=1,
                 shuffle=False,
                 num_workers=advanced.num_workers,
                 transform=None,
                 categories=train_categories,
+                deterministic_sampling=(not advanced.eval_random_sampling),
             )
 
             # Infer feature dimension
@@ -303,12 +304,13 @@ def categorical_crossval_(
                 feature_type=feature_type,
                 task=config.task,
                 patient_data=test_patient_data,
-                bag_size=None,
+                bag_size=advanced.eval_bag_size,
                 batch_size=1,
                 shuffle=False,
                 num_workers=advanced.num_workers,
                 transform=None,
                 categories=categories,
+                deterministic_sampling=(not advanced.eval_random_sampling),
             )
 
             predictions = _predict(
@@ -316,6 +318,7 @@ def categorical_crossval_(
                 test_dl=test_dl,
                 patient_ids=test_patients,
                 accelerator=advanced.accelerator,
+                prediction_iterations=advanced.eval_sample_count,
             )
 
             if config.task == "survival":

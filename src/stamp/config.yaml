@@ -185,6 +185,14 @@ deployment:
 
   patient_label: "PATIENT"
   filename_label: "FILENAME"
+  # Optional: during deployment, sample a fixed-size sub-bag instead of using
+  # all tiles at once. Useful when training used bag sampling and external
+  # cohorts contain many distracting tiles.
+  #bag_size: 512
+  # Repeat prediction multiple times and average probabilities.
+  #sample_count: 1
+  # If true and bag_size is set, use random tile subsampling for each repeat.
+  #random_sampling: false
 
   # Path of the trained model to deploy.
   checkpoint_paths:
@@ -322,6 +330,12 @@ advanced_config:
   # model performance. Reduces memory consumption. Default value works
   # fine for most cases.
   bag_size: 512
+  # Optional evaluation-time bag sampling. Leave null to use all tiles.
+  #eval_bag_size: 512
+  # Repeat validation/deployment-style prediction and average probabilities.
+  eval_sample_count: 1
+  # If true and eval_bag_size is set, draw random sub-bags for each repeat.
+  eval_random_sampling: false
   #num_workers: 16 # Default chosen by cpu cores
   # One Cycle Learning Rate Scheduler parameters. Check docs for more info.
   # Determines the initial learning rate via initial_lr = max_lr/div_factor

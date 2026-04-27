@@ -68,6 +68,9 @@ class DeploymentConfig(BaseModel):
     ground_truth_label: PandasLabel | Sequence[PandasLabel] | None = None
     patient_label: PandasLabel = "PATIENT"
     filename_label: PandasLabel = "FILENAME"
+    bag_size: int | None = None
+    sample_count: int = Field(1, ge=1)
+    random_sampling: bool = False
 
     # For survival prediction
     status_label: PandasLabel | None = None
@@ -176,6 +179,9 @@ class ModelParams(BaseModel):
 class AdvancedConfig(BaseModel):
     model_config = ConfigDict(extra="forbid")
     bag_size: int = 512
+    eval_bag_size: int | None = None
+    eval_sample_count: int = Field(1, ge=1)
+    eval_random_sampling: bool = False
     num_workers: int = min(os.cpu_count() or 1, 16)
     batch_size: int = 64
     accumulate_grad_batches: int = Field(1, ge=1)
