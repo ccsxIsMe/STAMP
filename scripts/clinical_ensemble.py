@@ -4,30 +4,67 @@ clinical_ensemble.py
 Post-hoc ensemble of WSI prediction scores + clinical features.
 
 For each cross-validation fold:
-  - Train logistic regression on clinical features (using same fold split)
-  - Average WSI score + clinical LR score
-  - Compute ensemble AUROC
+  - Train a clinical logistic-regression model on the training patients
+  - Predict clinical risk on the validation fold
+  - Blend WSI and clinical scores with either a fixed alpha or an alpha search
+  - Save blended out-of-fold predictions for downstream statistics
 
-Usage:
+Example:
     python scripts/clinical_ensemble.py \
-        --crossval_dir /data3/chensx/STAMP/outputs/crossval/exp02_vit_clinical \
-        --clini_csv    /data3/chensx/outputs/tables/ourdata_clinical_merged.csv \
-        --output_dir   /data3/chensx/STAMP/outputs/crossval/exp02_vit_clinical_ensemble
-
-Clinical features used: AFP (ng/ml), 年龄, 性别
+        --crossval_dir /data3/chensx/STAMP/outputs/crossval/exp01_abmil \
+        --clini_csv    /data3/chensx/STAMP/outputs/tables/ourdata_clinical_merged.csv \
+        --output_dir   /data3/chensx/STAMP/outputs/crossval/exp01_abmil_clinpath \
+        --preset ourdata_pathology \
+        --search_alpha
 """
+
+from __future__ import annotations
 
 import argparse
 import json
-import numpy as np
-import pandas as pd
+import re
 from pathlib import Path
 
+import numpy as np
+import pandas as pd
+from sklearn.compose import ColumnTransformer
+from sklearn.impute import SimpleImputer
+from sklearn.linear_model import LogisticRegression
+from sklearn.pipeline import Pipeline
+from sklearn.preprocessing import OneHotEncoder, StandardScaler
 
-# ── Helpers ───────────────────────────────────────────────────────────────────
 
-def sigmoid(x):
-    return 1 / (1 + np.exp(-np.clip(x, -50, 50)))
+PRESETS: dict[str, dict[str, list[str]]] = {
+    "basic": {
+        "cont": ["AFP (ng/ml)", "年龄"],
+        "cat": ["性别"],
+    },
+    "ourdata_pathology": {
+        "cont": [
+            "AFP (ng/ml)",
+            "年龄",
+            "肿瘤大小（影像学）(mm)",
+            "手术切缘宽度（mm）",
+        ],
+        "cat": [
+            "性别",
+            "微血管侵犯分级",
+            "组织学分级（分化）",
+            "卫星结节",
+            "门静脉癌栓",
+            "瘤内坏死",
+            "瘤内出血",
+            "CNLC",
+            "BCLC",
+            "分化",
+            "cohort",
+        ],
+    },
+    "shared_basic": {
+        "cont": ["age_at_initial_pathologic_diagnosis"],
+        "cat": ["gender", "Histological_grade", "Ajcc_pathologic_tumor_stage"],
+    },
+}
 
 
 def roc_auc(y_true, y_score):
@@ -53,167 +90,257 @@ def bootstrap_ci(y_true, y_score, n=1000, seed=42):
     return np.percentile(aucs, [2.5, 97.5]) if aucs else [float("nan")] * 2
 
 
-def logistic_regression_predict(X_train, y_train, X_val, lr=0.01, n_iter=500):
-    """Minimal logistic regression via gradient descent (no sklearn needed)."""
-    X_train = np.array(X_train, dtype=float)
-    y_train = np.array(y_train, dtype=float)
-    X_val = np.array(X_val, dtype=float)
-
-    # Standardize
-    mu = X_train.mean(axis=0)
-    std = X_train.std(axis=0) + 1e-8
-    X_train = (X_train - mu) / std
-    X_val = (X_val - mu) / std
-
-    # Add bias
-    X_train = np.column_stack([X_train, np.ones(len(X_train))])
-    X_val   = np.column_stack([X_val,   np.ones(len(X_val))])
-
-    w = np.zeros(X_train.shape[1])
-    for _ in range(n_iter):
-        pred = sigmoid(X_train @ w)
-        grad = X_train.T @ (pred - y_train) / len(y_train)
-        w -= lr * grad
-
-    return sigmoid(X_val @ w)
-
-
-# ── Main ──────────────────────────────────────────────────────────────────────
-
-CLINICAL_CONT = ["AFP (ng/ml)", "年龄"]
-CLINICAL_CAT  = ["性别"]
-
-
 def _parse_numeric(series: pd.Series) -> pd.Series:
-    """Strip leading comparison operators (>, <, ≥, ≤ and full-width variants) then cast to float."""
-    import re
     def _clean(v):
         if pd.isna(v):
             return float("nan")
         s = str(v).strip()
-        s = re.sub(r"^[><≥≤＞＜≧≦＝=\s]+", "", s)
+        s = re.sub(r"^[><>=≤≥\s]+", "", s)
         try:
             return float(s)
         except ValueError:
             return float("nan")
+
     return series.map(_clean)
 
 
-def run(crossval_dir: Path, clini_csv: Path, output_dir: Path, alpha: float = 0.5):
-    """
-    alpha: weight for WSI score (1-alpha for clinical score)
-    """
+def _load_splits(crossval_dir: Path) -> list[dict]:
+    with open(crossval_dir / "splits.json", "r", encoding="utf-8") as f:
+        return json.load(f)["splits"]
+
+
+def _resolve_feature_columns(
+    clini_df: pd.DataFrame,
+    preset: str | None,
+    cont_cols: list[str],
+    cat_cols: list[str],
+) -> tuple[list[str], list[str]]:
+    preset_cols = PRESETS.get(preset, {"cont": [], "cat": []}) if preset else {"cont": [], "cat": []}
+    cont = list(dict.fromkeys([*preset_cols["cont"], *cont_cols]))
+    cat = list(dict.fromkeys([*preset_cols["cat"], *cat_cols]))
+
+    cont = [c for c in cont if c in clini_df.columns]
+    cat = [c for c in cat if c in clini_df.columns]
+    if not cont and not cat:
+        raise ValueError("No valid clinical feature columns were found in the clinical table.")
+    return cont, cat
+
+
+def _fit_predict_clinical(
+    train_df: pd.DataFrame,
+    val_df: pd.DataFrame,
+    cont_cols: list[str],
+    cat_cols: list[str],
+) -> np.ndarray:
+    numeric_transformer = Pipeline(
+        steps=[
+            ("imputer", SimpleImputer(strategy="median")),
+            ("scaler", StandardScaler()),
+        ]
+    )
+    categorical_transformer = Pipeline(
+        steps=[
+            ("imputer", SimpleImputer(strategy="most_frequent")),
+            ("onehot", OneHotEncoder(handle_unknown="ignore")),
+        ]
+    )
+
+    preprocessor = ColumnTransformer(
+        transformers=[
+            ("num", numeric_transformer, cont_cols),
+            ("cat", categorical_transformer, cat_cols),
+        ],
+        remainder="drop",
+    )
+
+    model = Pipeline(
+        steps=[
+            ("preprocessor", preprocessor),
+            (
+                "classifier",
+                LogisticRegression(
+                    max_iter=2000,
+                    class_weight="balanced",
+                    solver="liblinear",
+                    random_state=42,
+                ),
+            ),
+        ]
+    )
+
+    X_train = train_df[cont_cols + cat_cols].copy()
+    X_val = val_df[cont_cols + cat_cols].copy()
+    y_train = train_df["Early recurrence"].astype(int).to_numpy()
+
+    model.fit(X_train, y_train)
+    return model.predict_proba(X_val)[:, 1]
+
+
+def _alpha_grid() -> list[float]:
+    return [round(x, 2) for x in np.linspace(0.0, 1.0, 21)]
+
+
+def run(
+    crossval_dir: Path,
+    clini_csv: Path,
+    output_dir: Path,
+    alpha: float = 0.5,
+    search_alpha: bool = False,
+    preset: str | None = None,
+    cont_cols: list[str] | None = None,
+    cat_cols: list[str] | None = None,
+):
     output_dir.mkdir(parents=True, exist_ok=True)
     clini_df = pd.read_csv(clini_csv)
     clini_df["PATIENT"] = clini_df["PATIENT"].astype(str)
 
-    # Clean numeric columns that may contain comparison-operator strings (e.g. ＞60500)
-    for col in CLINICAL_CONT:
-        if col in clini_df.columns:
-            clini_df[col] = _parse_numeric(clini_df[col])
+    cont_cols = cont_cols or []
+    cat_cols = cat_cols or []
+    cont_cols, cat_cols = _resolve_feature_columns(clini_df, preset, cont_cols, cat_cols)
 
-    # One-hot encode sex
-    sex_map = {"男": 1, "女": 0, "M": 1, "F": 0, "male": 1, "female": 0}
-    for col in CLINICAL_CAT:
-        if col in clini_df.columns:
-            clini_df[col + "_enc"] = clini_df[col].map(sex_map).fillna(0)
+    for col in cont_cols:
+        clini_df[col] = _parse_numeric(clini_df[col])
+    for col in cat_cols:
+        clini_df[col] = clini_df[col].astype(str).replace({"nan": np.nan, "None": np.nan})
 
-    feat_cols = CLINICAL_CONT + [c + "_enc" for c in CLINICAL_CAT
-                                  if c + "_enc" in clini_df.columns]
-    print(f"Clinical features: {feat_cols}")
+    print(f"Continuous features : {cont_cols}")
+    print(f"Categorical features: {cat_cols}")
 
-    all_preds = []
-    fold_aucs_wsi, fold_aucs_clin, fold_aucs_ens = [], [], []
+    splits = _load_splits(crossval_dir)
+    fold_outputs = []
+    fold_aucs_wsi, fold_aucs_clin = [], []
+    alpha_scores: dict[float, list[float]] = {a: [] for a in _alpha_grid()} if search_alpha else {alpha: []}
 
-    for split in range(5):
-        pred_file = crossval_dir / f"split-{split}" / "patient-preds.csv"
+    for split_idx, split in enumerate(splits):
+        pred_file = crossval_dir / f"split-{split_idx}" / "patient-preds.csv"
         if not pred_file.exists():
-            print(f"  split-{split}: prediction file not found, skipping")
+            print(f"split-{split_idx}: prediction file not found, skipping")
             continue
 
         wsi_df = pd.read_csv(pred_file)
         wsi_df["PATIENT"] = wsi_df["PATIENT"].astype(str)
 
-        # Merge clinical
-        merged = wsi_df.merge(clini_df[["PATIENT"] + feat_cols], on="PATIENT", how="inner")
+        merged = wsi_df.merge(
+            clini_df[["PATIENT", "Early recurrence", *cont_cols, *cat_cols]],
+            on=["PATIENT", "Early recurrence"],
+            how="inner",
+        )
         if len(merged) < len(wsi_df):
-            print(f"  split-{split}: {len(wsi_df)-len(merged)} patients lost in clinical merge")
+            print(f"split-{split_idx}: {len(wsi_df) - len(merged)} patients lost in clinical merge")
 
-        y_val = merged["Early recurrence"].values
-        wsi_score = merged["Early recurrence_1"].values
+        train_patients = set(split["train_patients"])
+        train_df = clini_df[clini_df["PATIENT"].isin(train_patients)].copy()
+        train_df = train_df.dropna(subset=["Early recurrence"])
 
-        # Determine training patients (all patients NOT in this validation fold)
-        all_patients = set(clini_df["PATIENT"].astype(str))
-        val_patients = set(merged["PATIENT"].astype(str))
-        train_patients = all_patients - val_patients
+        clin_score = _fit_predict_clinical(
+            train_df=train_df,
+            val_df=merged,
+            cont_cols=cont_cols,
+            cat_cols=cat_cols,
+        )
 
-        train_df = clini_df[clini_df["PATIENT"].isin(train_patients)].dropna(subset=feat_cols)
-        X_train = train_df[feat_cols].values
-        y_train = train_df["Early recurrence"].values
-        X_val   = merged[feat_cols].values
+        y_val = merged["Early recurrence"].astype(int).to_numpy()
+        wsi_score = merged["Early recurrence_1"].to_numpy()
 
-        clin_score = logistic_regression_predict(X_train, y_train, X_val)
-
-        # Ensemble
-        ens_score = alpha * wsi_score + (1 - alpha) * clin_score
-
-        auc_wsi  = roc_auc(y_val, wsi_score)
+        auc_wsi = roc_auc(y_val, wsi_score)
         auc_clin = roc_auc(y_val, clin_score)
-        auc_ens  = roc_auc(y_val, ens_score)
-
         fold_aucs_wsi.append(auc_wsi)
         fold_aucs_clin.append(auc_clin)
-        fold_aucs_ens.append(auc_ens)
 
-        print(f"  split-{split}: WSI={auc_wsi:.4f}  Clinical={auc_clin:.4f}  Ensemble={auc_ens:.4f}")
+        for a in alpha_scores:
+            ens_score = a * wsi_score + (1 - a) * clin_score
+            alpha_scores[a].append(roc_auc(y_val, ens_score))
 
-        merged["ens_score"] = ens_score
-        merged["clin_score"] = clin_score
-        all_preds.append(merged[["PATIENT", "Early recurrence",
-                                  "Early recurrence_1", "clin_score", "ens_score"]])
+        fold_outputs.append(
+            pd.DataFrame(
+                {
+                    "PATIENT": merged["PATIENT"],
+                    "Early recurrence": y_val,
+                    "Early recurrence_1": wsi_score,
+                    "clin_score": clin_score,
+                }
+            )
+        )
+        print(f"split-{split_idx}: WSI={auc_wsi:.4f} Clinical={auc_clin:.4f}")
 
-        # Save fold predictions
-        fold_out = output_dir / f"split-{split}"
-        fold_out.mkdir(exist_ok=True)
-        merged["Early recurrence_1_ensemble"] = ens_score
-        out_df = merged[["PATIENT", "Early recurrence",
-                          "Early recurrence_1", "Early recurrence_1_ensemble"]]
-        out_df.to_csv(fold_out / "patient-preds.csv", index=False)
-
-    if not fold_aucs_ens:
+    if not fold_outputs:
         print("No completed folds found.")
         return
 
-    all_df = pd.concat(all_preds)
-    ci_lo, ci_hi = bootstrap_ci(all_df["Early recurrence"], all_df["ens_score"])
+    if search_alpha:
+        best_alpha = max(alpha_scores, key=lambda a: np.nanmean(alpha_scores[a]))
+    else:
+        best_alpha = alpha
 
-    print("\n" + "=" * 55)
-    print(f"  WSI only:    {np.mean(fold_aucs_wsi):.4f} ± {np.std(fold_aucs_wsi):.4f}")
-    print(f"  Clinical LR: {np.mean(fold_aucs_clin):.4f} ± {np.std(fold_aucs_clin):.4f}")
-    print(f"  Ensemble:    {np.mean(fold_aucs_ens):.4f} ± {np.std(fold_aucs_ens):.4f}  "
-          f"(95%CI {ci_lo:.4f}–{ci_hi:.4f})")
+    all_df = pd.concat(fold_outputs, ignore_index=True)
+    all_df["Early recurrence_1_ensemble"] = (
+        best_alpha * all_df["Early recurrence_1"] + (1 - best_alpha) * all_df["clin_score"]
+    )
 
-    # Save summary
+    for split_idx, fold_df in enumerate(fold_outputs):
+        fold_out = output_dir / f"split-{split_idx}"
+        fold_out.mkdir(parents=True, exist_ok=True)
+        out_df = fold_df.copy()
+        out_df["Early recurrence_1_ensemble"] = (
+            best_alpha * out_df["Early recurrence_1"] + (1 - best_alpha) * out_df["clin_score"]
+        )
+        out_df[
+            ["PATIENT", "Early recurrence", "Early recurrence_1", "Early recurrence_1_ensemble"]
+        ].to_csv(fold_out / "patient-preds.csv", index=False)
+
+    ci_lo, ci_hi = bootstrap_ci(
+        all_df["Early recurrence"].to_numpy(),
+        all_df["Early recurrence_1_ensemble"].to_numpy(),
+    )
+    ensemble_auc = roc_auc(
+        all_df["Early recurrence"].to_numpy(),
+        all_df["Early recurrence_1_ensemble"].to_numpy(),
+    )
+
+    print("\n" + "=" * 60)
+    print(f"WSI only mean fold AUROC   : {np.mean(fold_aucs_wsi):.4f}")
+    print(f"Clinical mean fold AUROC   : {np.mean(fold_aucs_clin):.4f}")
+    print(f"Ensemble OOF AUROC         : {ensemble_auc:.4f}")
+    print(f"Ensemble 95% CI            : {ci_lo:.4f} to {ci_hi:.4f}")
+    print(f"Best alpha (WSI weight)    : {best_alpha:.2f}")
+
     summary = {
-        "wsi_mean": np.mean(fold_aucs_wsi),
-        "clinical_mean": np.mean(fold_aucs_clin),
-        "ensemble_mean": np.mean(fold_aucs_ens),
-        "ensemble_ci_lo": ci_lo,
-        "ensemble_ci_hi": ci_hi,
-        "alpha_wsi": alpha,
+        "preset": preset,
+        "continuous_features": cont_cols,
+        "categorical_features": cat_cols,
+        "wsi_fold_mean": float(np.mean(fold_aucs_wsi)),
+        "clinical_fold_mean": float(np.mean(fold_aucs_clin)),
+        "ensemble_oof_auc": float(ensemble_auc),
+        "ensemble_ci_lo": float(ci_lo),
+        "ensemble_ci_hi": float(ci_hi),
+        "alpha_wsi": float(best_alpha),
+        "search_alpha": search_alpha,
+        "alpha_grid_scores": {str(a): float(np.nanmean(v)) for a, v in alpha_scores.items()},
     }
-    with open(output_dir / "ensemble_summary.json", "w") as f:
-        json.dump(summary, f, indent=2)
+    with open(output_dir / "ensemble_summary.json", "w", encoding="utf-8") as f:
+        json.dump(summary, f, indent=2, ensure_ascii=False)
     print(f"\nSaved to: {output_dir}")
 
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument("--crossval_dir", type=Path, required=True)
-    parser.add_argument("--clini_csv",    type=Path, required=True)
-    parser.add_argument("--output_dir",   type=Path, required=True)
-    parser.add_argument("--alpha", type=float, default=0.5,
-                        help="Weight for WSI score (default 0.5 = equal ensemble)")
+    parser.add_argument("--clini_csv", type=Path, required=True)
+    parser.add_argument("--output_dir", type=Path, required=True)
+    parser.add_argument("--alpha", type=float, default=0.5, help="Fixed WSI weight when alpha search is disabled.")
+    parser.add_argument("--search_alpha", action="store_true", help="Search the best WSI/clinical blending weight on out-of-fold predictions.")
+    parser.add_argument("--preset", choices=sorted(PRESETS), default="basic")
+    parser.add_argument("--cont_col", action="append", default=[], help="Additional continuous clinical feature column. Can be passed multiple times.")
+    parser.add_argument("--cat_col", action="append", default=[], help="Additional categorical clinical feature column. Can be passed multiple times.")
     args = parser.parse_args()
 
-    run(args.crossval_dir, args.clini_csv, args.output_dir, args.alpha)
+    run(
+        crossval_dir=args.crossval_dir,
+        clini_csv=args.clini_csv,
+        output_dir=args.output_dir,
+        alpha=args.alpha,
+        search_alpha=args.search_alpha,
+        preset=args.preset,
+        cont_cols=args.cont_col,
+        cat_cols=args.cat_col,
+    )
