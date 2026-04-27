@@ -1,0 +1,40 @@
+# ============================================================
+# Exp01: TransMIL + longer training + AUROC checkpoint selection
+# Goal: isolate training-strategy gains without changing the
+# baseline architecture, bag coverage, or learning rate.
+# ============================================================
+
+crossval:
+  output_dir: "/data3/chensx/STAMP/outputs/crossval/exp01_transmil_longtrain_auroc"
+
+  clini_table: "/data3/chensx/STAMP/outputs/tables/ourdata_clinical_merged.csv"
+  feature_dir: "/data3/chensx/STAMP/outputs/features/ourdata_conch1_5"
+  slide_table: "/data3/chensx/STAMP/outputs/tables/ourdata_slide_table.csv"
+
+  task: "classification"
+  ground_truth_label: "Early recurrence"
+  categories: ["0", "1"]
+  patient_label: "PATIENT"
+  filename_label: "FILENAME"
+  n_splits: 5
+
+advanced_config:
+  seed: 42
+  max_epochs: 64
+  patience: 24
+  batch_size: 64
+  accumulate_grad_batches: 1
+  bag_size: 512
+  max_lr: 1e-4
+  div_factor: 25.0
+  monitor_metric: "validation_auroc"
+  monitor_mode: "max"
+  use_class_weights: true
+  classification_loss: "cross_entropy"
+  label_smoothing: 0.0
+
+  model_name: "trans_mil"
+
+  model_params:
+    trans_mil:
+      dim_hidden: 512

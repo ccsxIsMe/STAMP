@@ -184,6 +184,8 @@ class AdvancedConfig(BaseModel):
     accelerator: str = "gpu" if torch.cuda.is_available() else "cpu"
     max_lr: float = 1e-4
     div_factor: float = 25.0
+    monitor_metric: str | None = None
+    monitor_mode: Literal["min", "max"] | None = None
     use_class_weights: bool = True
     classification_loss: Literal["cross_entropy", "focal"] = "cross_entropy"
     label_smoothing: float = Field(0.0, ge=0.0, lt=1.0)

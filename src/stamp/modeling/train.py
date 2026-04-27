@@ -94,6 +94,8 @@ def train_categorical_model_(
         max_epochs=advanced.max_epochs,
         patience=advanced.patience,
         accumulate_grad_batches=advanced.accumulate_grad_batches,
+        monitor_metric=advanced.monitor_metric,
+        monitor_mode=advanced.monitor_mode,
         accelerator=advanced.accelerator,
     )
 
@@ -518,6 +520,8 @@ def train_model_(
     max_epochs: int,
     patience: int,
     accumulate_grad_batches: int,
+    monitor_metric: str | None,
+    monitor_mode: str | None,
     accelerator: str | Accelerator,
 ) -> lightning.LightningModule:
     """Trains a model.
@@ -529,10 +533,18 @@ def train_model_(
 
     # Decide monitor metric based on task.
     task = getattr(model.hparams, "task", None)
-    if task == "survival":
-        monitor_metric, mode = "val_cindex", "max"
-    else:  # regression or classification
-        monitor_metric, mode = "validation_loss", "min"
+    if monitor_metric is None:
+        if task == "survival":
+            monitor_metric, mode = "val_cindex", "max"
+        else:  # regression or classification
+            monitor_metric, mode = "validation_loss", "min"
+    else:
+        if monitor_mode is not None:
+            mode = monitor_mode
+        elif "auroc" in monitor_metric.lower() or "cindex" in monitor_metric.lower():
+            mode = "max"
+        else:
+            mode = "min"
 
     model_checkpoint = ModelCheckpoint(
         monitor=monitor_metric,

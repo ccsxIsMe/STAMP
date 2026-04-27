@@ -327,6 +327,9 @@ advanced_config:
   # Determines the initial learning rate via initial_lr = max_lr/div_factor
   max_lr: 1e-4
   div_factor: 25. 
+  # Optional checkpoint/early-stop metric override, e.g. "validation_auroc".
+  #monitor_metric: "validation_loss"
+  #monitor_mode: "min"
   # Whether to apply inverse-frequency class weights in classification loss.
   use_class_weights: true
   # Classification loss: "cross_entropy" (default) or "focal".

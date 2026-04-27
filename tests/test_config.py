@@ -122,6 +122,8 @@ def test_config_parsing() -> None:
                 "max_epochs": 64,
                 "patience": 16,
                 "accelerator": "gpu",
+                "monitor_metric": "validation_auroc",
+                "monitor_mode": "max",
                 "model_params": {
                     "vit": {
                         "dim_model": 512,
@@ -271,6 +273,8 @@ def test_config_parsing() -> None:
             max_epochs=64,
             patience=16,
             accelerator="gpu",
+            monitor_metric="validation_auroc",
+            monitor_mode="max",
             model_params=ModelParams(
                 vit=VitModelParams(
                     dim_model=512,

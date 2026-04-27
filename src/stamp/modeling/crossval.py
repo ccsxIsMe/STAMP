@@ -282,6 +282,8 @@ def categorical_crossval_(
                 max_epochs=advanced.max_epochs,
                 patience=advanced.patience,
                 accumulate_grad_batches=advanced.accumulate_grad_batches,
+                monitor_metric=advanced.monitor_metric,
+                monitor_mode=advanced.monitor_mode,
                 accelerator=advanced.accelerator,
             )
         else:
