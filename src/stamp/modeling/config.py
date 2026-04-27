@@ -117,6 +117,12 @@ class DsmilModelParams(BaseModel):
     dropout: float = 0.25
 
 
+class TransMILFusionModelParams(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    dim_hidden: int = 512
+    dropout: float = 0.25
+
+
 class BarspoonParams(BaseModel):
     model_config = ConfigDict(extra="forbid")
     d_model: int = 512
@@ -146,6 +152,9 @@ class ModelParams(BaseModel):
     model_config = ConfigDict(extra="forbid")
     vit: VitModelParams = Field(default_factory=VitModelParams)
     trans_mil: TransMILModelParams = Field(default_factory=TransMILModelParams)
+    trans_mil_fusion: TransMILFusionModelParams = Field(
+        default_factory=TransMILFusionModelParams
+    )
     mlp: MlpModelParams = Field(default_factory=MlpModelParams)
     linear: LinearModelParams = Field(default_factory=LinearModelParams)
     barspoon: BarspoonParams = Field(default_factory=BarspoonParams)

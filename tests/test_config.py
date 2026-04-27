@@ -11,6 +11,7 @@ from stamp.modeling.config import (
     ModelParams,
     TrainConfig,
     TransMILModelParams,
+    TransMILFusionModelParams,
     VitModelParams,
 )
 from stamp.preprocessing.config import (
@@ -144,6 +145,10 @@ def test_config_parsing() -> None:
                     "dsmil": {
                         "dim_hidden": 384,
                         "dropout": 0.2,
+                    },
+                    "trans_mil_fusion": {
+                        "dim_hidden": 448,
+                        "dropout": 0.15,
                     },
                 },
             },
@@ -280,6 +285,10 @@ def test_config_parsing() -> None:
                 dsmil=DsmilModelParams(
                     dim_hidden=384,
                     dropout=0.2,
+                ),
+                trans_mil_fusion=TransMILFusionModelParams(
+                    dim_hidden=448,
+                    dropout=0.15,
                 ),
             ),
         ),

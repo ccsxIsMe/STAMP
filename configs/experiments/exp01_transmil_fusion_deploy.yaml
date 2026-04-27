@@ -1,0 +1,17 @@
+deployment:
+  output_dir: "/data3/chensx/STAMP/outputs/deploy/exp01_transmil_fusion"
+
+  checkpoint_paths:
+    - "/data3/chensx/STAMP/outputs/crossval/exp01_transmil_fusion/split-0/model.ckpt"
+    - "/data3/chensx/STAMP/outputs/crossval/exp01_transmil_fusion/split-1/model.ckpt"
+    - "/data3/chensx/STAMP/outputs/crossval/exp01_transmil_fusion/split-2/model.ckpt"
+    - "/data3/chensx/STAMP/outputs/crossval/exp01_transmil_fusion/split-3/model.ckpt"
+    - "/data3/chensx/STAMP/outputs/crossval/exp01_transmil_fusion/split-4/model.ckpt"
+
+  clini_table: "/data3/chensx/STAMP/data_info/TCGA_LIHC_clinical.csv"
+  slide_table: "/data3/chensx/STAMP/data_info/TCGA_LIHC_slide_table.csv"
+  feature_dir: "/data3/chensx/STAMP/outputs/features/tcga_liver_conch1_5"
+
+  ground_truth_label: "Early recurrence"
+  patient_label: "PATIENT"
+  filename_label: "FILENAME"
