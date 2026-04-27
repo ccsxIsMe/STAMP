@@ -1,0 +1,39 @@
+# ============================================================
+# Exp01: TransMIL + larger bag coverage + longer training
+# Goal: preserve the strongest baseline architecture while
+# exposing it to more tiles per patient and stabilizing updates
+# with gradient accumulation.
+# ============================================================
+
+crossval:
+  output_dir: "/data3/chensx/STAMP/outputs/crossval/exp01_transmil_largebag"
+
+  clini_table: "/data3/chensx/STAMP/outputs/tables/ourdata_clinical_merged.csv"
+  feature_dir: "/data3/chensx/STAMP/outputs/features/ourdata_conch1_5"
+  slide_table: "/data3/chensx/STAMP/outputs/tables/ourdata_slide_table.csv"
+
+  task: "classification"
+  ground_truth_label: "Early recurrence"
+  categories: ["0", "1"]
+  patient_label: "PATIENT"
+  filename_label: "FILENAME"
+  n_splits: 5
+
+advanced_config:
+  seed: 42
+  max_epochs: 64
+  patience: 24
+  batch_size: 32
+  accumulate_grad_batches: 2
+  bag_size: 1024
+  max_lr: 3e-4
+  div_factor: 25.0
+  use_class_weights: true
+  classification_loss: "cross_entropy"
+  label_smoothing: 0.0
+
+  model_name: "trans_mil"
+
+  model_params:
+    trans_mil:
+      dim_hidden: 512

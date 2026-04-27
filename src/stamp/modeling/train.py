@@ -93,6 +93,7 @@ def train_categorical_model_(
         valid_dl=valid_dl,
         max_epochs=advanced.max_epochs,
         patience=advanced.patience,
+        accumulate_grad_batches=advanced.accumulate_grad_batches,
         accelerator=advanced.accelerator,
     )
 
@@ -133,9 +134,10 @@ def setup_model_for_training(
     )
 
     _logger.info(
-        "Training dataloaders: bag_size=%s, batch_size=%s, num_workers=%s, task=%s",
+        "Training dataloaders: bag_size=%s, batch_size=%s, accumulate_grad_batches=%s, num_workers=%s, task=%s",
         advanced.bag_size,
         advanced.batch_size,
+        advanced.accumulate_grad_batches,
         advanced.num_workers,
         task,
     )
@@ -224,9 +226,10 @@ def setup_model_for_training(
         f"Instantiating model '{advanced.model_name.value}' with parameters: {model_specific_params}"
     )
     _logger.info(
-        "Other params: max_epochs=%s, patience=%s",
+        "Other params: max_epochs=%s, patience=%s, accumulate_grad_batches=%s",
         advanced.max_epochs,
         advanced.patience,
+        advanced.accumulate_grad_batches,
     )
 
     model = LitModelClass(model_class=ModelClass, **all_params)
@@ -345,9 +348,10 @@ def setup_model_from_dataloaders(
         f"Instantiating model '{advanced.model_name.value}' with parameters: {model_specific_params}"
     )
     _logger.info(
-        "Other params: max_epochs=%s, patience=%s",
+        "Other params: max_epochs=%s, patience=%s, accumulate_grad_batches=%s",
         advanced.max_epochs,
         advanced.patience,
+        advanced.accumulate_grad_batches,
     )
 
     model = LitModelClass(model_class=ModelClass, **all_params)
@@ -513,6 +517,7 @@ def train_model_(
     valid_dl: DataLoader[tuple[Bags, CoordinatesBatch, BagSizes, EncodedTargets]],
     max_epochs: int,
     patience: int,
+    accumulate_grad_batches: int,
     accelerator: str | Accelerator,
 ) -> lightning.LightningModule:
     """Trains a model.
@@ -549,6 +554,7 @@ def train_model_(
         #  2. `barspoon.model.SafeMulticlassAUROC` breaks on multiple GPUs
         accelerator=accelerator,
         devices=1,
+        accumulate_grad_batches=accumulate_grad_batches,
         # gradient_clip_val=0.5,
         logger=CSVLogger(save_dir=output_dir),
         log_every_n_steps=len(train_dl),

@@ -316,6 +316,8 @@ advanced_config:
   max_epochs: 32
   patience: 16
   batch_size: 64
+  # Effective batch size = batch_size * accumulate_grad_batches
+  accumulate_grad_batches: 1
   # Only for tile-level training. Reducing its amount could affect
   # model performance. Reduces memory consumption. Default value works
   # fine for most cases.

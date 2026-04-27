@@ -178,6 +178,7 @@ class AdvancedConfig(BaseModel):
     bag_size: int = 512
     num_workers: int = min(os.cpu_count() or 1, 16)
     batch_size: int = 64
+    accumulate_grad_batches: int = Field(1, ge=1)
     max_epochs: int = 32
     patience: int = 16
     accelerator: str = "gpu" if torch.cuda.is_available() else "cpu"
