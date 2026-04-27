@@ -6,6 +6,7 @@ from stamp.modeling.config import (
     AdvancedConfig,
     CrossvalConfig,
     DeploymentConfig,
+    DsmilModelParams,
     MlpModelParams,
     ModelParams,
     TrainConfig,
@@ -140,6 +141,10 @@ def test_config_parsing() -> None:
                         "feature_adapter_input_layernorm": True,
                         "feature_adapter_layerscale_init": 0.001,
                     },
+                    "dsmil": {
+                        "dim_hidden": 384,
+                        "dropout": 0.2,
+                    },
                 },
             },
         }
@@ -271,6 +276,10 @@ def test_config_parsing() -> None:
                     feature_adapter_dropout=0.1,
                     feature_adapter_input_layernorm=True,
                     feature_adapter_layerscale_init=0.001,
+                ),
+                dsmil=DsmilModelParams(
+                    dim_hidden=384,
+                    dropout=0.2,
                 ),
             ),
         ),

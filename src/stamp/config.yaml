@@ -334,7 +334,7 @@ advanced_config:
   # Focal-loss gamma. Only used when classification_loss == "focal".
   focal_gamma: 2.0
   # Select a model regardless of task
-  model_name: "vit" # or mlp, linear, trans_mil, barspoon
+  model_name: "vit" # or mlp, linear, trans_mil, dsmil, barspoon
 
   model_params:
     vit: # Vision Transformer
@@ -355,6 +355,10 @@ advanced_config:
       feature_adapter_dropout: 0.0
       feature_adapter_input_layernorm: false
       feature_adapter_layerscale_init: 0.001
+
+    dsmil: # https://arxiv.org/abs/2011.08939
+      dim_hidden: 512
+      dropout: 0.25
 
     mlp: # Multilayer Perceptron
       dim_hidden: 512

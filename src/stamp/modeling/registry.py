@@ -24,6 +24,7 @@ class ModelName(StrEnum):
     LINEAR = "linear"
     BARSPOON = "barspoon"
     ABMIL = "abmil"
+    DSMIL = "dsmil"
 
 
 # Map (feature_type, task) → correct Lightning wrapper class
@@ -72,6 +73,9 @@ def load_model_class(task: Task, feature_type: str, model_name: ModelName):
 
         case ModelName.ABMIL:
             from stamp.modeling.models.abmil import ABMIL as ModelClass
+
+        case ModelName.DSMIL:
+            from stamp.modeling.models.dsmil import DSMIL as ModelClass
 
         case _:
             raise ValueError(f"Unknown model name: {model_name}")
