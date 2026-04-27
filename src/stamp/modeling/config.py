@@ -123,6 +123,16 @@ class TransMILFusionModelParams(BaseModel):
     dropout: float = 0.25
 
 
+class DtfdMilModelParams(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    dim_hidden: int = 512
+    dropout: float = 0.25
+    n_groups: int = Field(4, ge=2)
+    distill_topk: int = Field(4, ge=1)
+    distill_bottomk: int = Field(2, ge=0)
+    aux_loss_blend: float = Field(0.5, ge=0.0, le=1.0)
+
+
 class BarspoonParams(BaseModel):
     model_config = ConfigDict(extra="forbid")
     d_model: int = 512
@@ -155,6 +165,7 @@ class ModelParams(BaseModel):
     trans_mil_fusion: TransMILFusionModelParams = Field(
         default_factory=TransMILFusionModelParams
     )
+    dtfd_mil: DtfdMilModelParams = Field(default_factory=DtfdMilModelParams)
     mlp: MlpModelParams = Field(default_factory=MlpModelParams)
     linear: LinearModelParams = Field(default_factory=LinearModelParams)
     barspoon: BarspoonParams = Field(default_factory=BarspoonParams)

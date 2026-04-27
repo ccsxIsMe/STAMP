@@ -163,7 +163,7 @@ def setup_model_for_training(
     ):
         raise ValueError(
             "Model 'barspoon' requires multi-target classification. "
-            "For single-target classification set model_name to 'vit', 'trans_mil', 'trans_mil_fusion', 'dsmil', or 'mlp'."
+            "For single-target classification set model_name to 'vit', 'trans_mil', 'trans_mil_fusion', 'dsmil', 'dtfd_mil', or 'mlp'."
         )
 
     # 2. Instantiate the lightning wrapper (based on provided task, feature type) and model backbone dynamically
@@ -284,7 +284,7 @@ def setup_model_from_dataloaders(
     ):
         raise ValueError(
             "Model 'barspoon' requires multi-target classification. "
-            "For single-target classification set model_name to 'vit', 'trans_mil', 'trans_mil_fusion', 'dsmil', or 'mlp'."
+            "For single-target classification set model_name to 'vit', 'trans_mil', 'trans_mil_fusion', 'dsmil', 'dtfd_mil', or 'mlp'."
         )
 
     # 2. Instantiate the lightning wrapper (based on provided task, feature type) and model backbone dynamically

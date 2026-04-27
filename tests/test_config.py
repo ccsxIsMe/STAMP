@@ -6,6 +6,7 @@ from stamp.modeling.config import (
     AdvancedConfig,
     CrossvalConfig,
     DeploymentConfig,
+    DtfdMilModelParams,
     DsmilModelParams,
     MlpModelParams,
     ModelParams,
@@ -150,6 +151,14 @@ def test_config_parsing() -> None:
                         "dim_hidden": 448,
                         "dropout": 0.15,
                     },
+                    "dtfd_mil": {
+                        "dim_hidden": 416,
+                        "dropout": 0.2,
+                        "n_groups": 4,
+                        "distill_topk": 3,
+                        "distill_bottomk": 1,
+                        "aux_loss_blend": 0.4,
+                    },
                 },
             },
         }
@@ -289,6 +298,14 @@ def test_config_parsing() -> None:
                 trans_mil_fusion=TransMILFusionModelParams(
                     dim_hidden=448,
                     dropout=0.15,
+                ),
+                dtfd_mil=DtfdMilModelParams(
+                    dim_hidden=416,
+                    dropout=0.2,
+                    n_groups=4,
+                    distill_topk=3,
+                    distill_bottomk=1,
+                    aux_loss_blend=0.4,
                 ),
             ),
         ),
