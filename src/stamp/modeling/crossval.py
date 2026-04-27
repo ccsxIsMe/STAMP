@@ -281,6 +281,7 @@ def categorical_crossval_(
                 valid_dl=test_dl,
                 max_epochs=advanced.max_epochs,
                 patience=advanced.patience,
+                accumulate_grad_batches=advanced.accumulate_grad_batches,
                 accelerator=advanced.accelerator,
             )
         else:
