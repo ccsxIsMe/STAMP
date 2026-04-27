@@ -1,0 +1,7 @@
+statistics:
+  output_dir: "/data3/chensx/STAMP/outputs/stats/exp01_abmil_clinstack_tcga"
+  task: "classification"
+  ground_truth_label: "Early recurrence"
+  true_class: "1"
+  pred_csvs:
+    - "/data3/chensx/STAMP/outputs/deploy/exp01_abmil_clinstack_tcga/patient-preds.csv"
