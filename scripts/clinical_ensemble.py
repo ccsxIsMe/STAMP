@@ -281,11 +281,21 @@ def run(
         fold_out = output_dir / f"split-{split_idx}"
         fold_out.mkdir(parents=True, exist_ok=True)
         out_df = fold_df.copy()
-        out_df["Early recurrence_1_ensemble"] = (
+        ensemble_score = (
             best_alpha * out_df["Early recurrence_1"] + (1 - best_alpha) * out_df["clin_score"]
         )
+        out_df["Early recurrence_1_ensemble"] = ensemble_score
+        # Keep a full STAMP-compatible probability table for binary classification.
+        out_df["Early recurrence_1"] = ensemble_score
+        out_df["Early recurrence_0"] = 1.0 - ensemble_score
         out_df[
-            ["PATIENT", "Early recurrence", "Early recurrence_1", "Early recurrence_1_ensemble"]
+            [
+                "PATIENT",
+                "Early recurrence",
+                "Early recurrence_0",
+                "Early recurrence_1",
+                "Early recurrence_1_ensemble",
+            ]
         ].to_csv(fold_out / "patient-preds.csv", index=False)
 
     ci_lo, ci_hi = bootstrap_ci(
