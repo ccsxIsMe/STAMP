@@ -1,0 +1,21 @@
+deployment:
+  output_dir: "/data3/chensx/STAMP/outputs/deploy/exp14_uni2_subbag"
+
+  clini_table: "/data3/chensx/STAMP/outputs/tables/tcga_clinical_filtered.csv"
+  feature_dir: "/data3/chensx/STAMP/outputs/features/tcga_uni2"
+  slide_table: "/data3/chensx/STAMP/outputs/tables/tcga_slide_table_uni2.csv"
+
+  ground_truth_label: "Early recurrence"
+  patient_label: "PATIENT"
+  filename_label: "FILENAME"
+
+  bag_size: 512
+  sample_count: 8
+  random_sampling: true
+
+  checkpoint_paths:
+    - "/data3/chensx/STAMP/outputs/crossval/exp14_uni2_subbag/split-0/model.ckpt"
+    - "/data3/chensx/STAMP/outputs/crossval/exp14_uni2_subbag/split-1/model.ckpt"
+    - "/data3/chensx/STAMP/outputs/crossval/exp14_uni2_subbag/split-2/model.ckpt"
+    - "/data3/chensx/STAMP/outputs/crossval/exp14_uni2_subbag/split-3/model.ckpt"
+    - "/data3/chensx/STAMP/outputs/crossval/exp14_uni2_subbag/split-4/model.ckpt"

@@ -1,0 +1,8 @@
+statistics:
+  output_dir: "/data3/chensx/STAMP/outputs/stats/exp15_conch_uni2_ensemble_tcga"
+  task: "classification"
+  ground_truth_label: "Early recurrence"
+  true_class: "1"
+
+  pred_csvs:
+    - "/data3/chensx/STAMP/outputs/deploy/exp15_conch_uni2_ensemble/patient-preds.csv"
