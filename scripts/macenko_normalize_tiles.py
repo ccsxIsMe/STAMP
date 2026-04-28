@@ -38,13 +38,17 @@ from PIL import Image
 
 _FIRST_ERROR_LOCK = Lock()
 _FIRST_ERROR_MESSAGE: str | None = None
+_FIRST_ERROR_PRINTED = False
 
 
 def _record_first_error(message: str) -> None:
-    global _FIRST_ERROR_MESSAGE
+    global _FIRST_ERROR_MESSAGE, _FIRST_ERROR_PRINTED
     with _FIRST_ERROR_LOCK:
         if _FIRST_ERROR_MESSAGE is None:
             _FIRST_ERROR_MESSAGE = message
+        if not _FIRST_ERROR_PRINTED:
+            print(f"First normalization error: {_FIRST_ERROR_MESSAGE}", flush=True)
+            _FIRST_ERROR_PRINTED = True
 
 
 def _get_macenko_normalizer(target_path: Path):
@@ -254,8 +258,17 @@ def _run_plain_mode(src_cache: Path, dst_cache: Path, normalizer, backend: str, 
     print(f"Output: {dst_cache}")
 
 
-def _run_zip_mode(src_cache: Path, dst_cache: Path, normalizer, backend: str, workers: int) -> None:
+def _run_zip_mode(
+    src_cache: Path,
+    dst_cache: Path,
+    normalizer,
+    backend: str,
+    workers: int,
+    max_archives: int | None = None,
+) -> None:
     cache_zips = _find_cache_zips(src_cache)
+    if max_archives is not None:
+        cache_zips = cache_zips[:max_archives]
     print(f"Detected STAMP zip cache with {len(cache_zips)} slide archives")
 
     total_normalized = 0
@@ -296,6 +309,12 @@ def main():
         help="Optional reference H&E tile to normalize toward. If omitted or missing, auto-pick one tile from src_cache.",
     )
     parser.add_argument("--workers", type=int, default=8)
+    parser.add_argument(
+        "--max_archives",
+        type=int,
+        default=None,
+        help="Optional debug limit: only process the first N cache zip archives.",
+    )
     args = parser.parse_args()
 
     if args.target_img is not None and args.target_img.exists():
@@ -319,6 +338,7 @@ def main():
             normalizer=normalizer,
             backend=backend,
             workers=args.workers,
+            max_archives=args.max_archives,
         )
     elif plain_tiles:
         _run_plain_mode(
