@@ -11,7 +11,6 @@ Typical usage with STAMP zip caches:
     python scripts/macenko_normalize_tiles.py \
         --src_cache /data3/chensx/STAMP/outputs/cache/tcga \
         --dst_cache /data3/chensx/STAMP/outputs/cache/tcga_macenko \
-        --target_img /data3/chensx/STAMP/scripts/macenko_target.jpg \
         --workers 8
 
 Then run STAMP preprocess again, pointing `cache_dir` to `tcga_macenko`, so
@@ -56,6 +55,65 @@ def _get_macenko_normalizer(target_path: Path):
         to_tensor255 = transforms.Compose([transforms.ToTensor(), lambda x: x * 255])
         normalizer = torchstain.normalizers.MacenkoNormalizer(backend="torch")
         normalizer.fit(to_tensor255(target_img))
+        return normalizer, "torchstain"
+    except ImportError:
+        pass
+
+    raise ImportError(
+        "Neither staintools nor torchstain is installed.\n"
+        "Run: pip install staintools   or   pip install torchstain"
+    )
+
+
+def _extract_auto_target_image(src_cache: Path) -> tuple[Image.Image, str]:
+    """
+    Pick one tile from cache as the normalization reference.
+
+    Returns:
+        (image, description)
+    """
+    cache_zips = _find_cache_zips(src_cache)
+    if cache_zips:
+        for zip_path in sorted(cache_zips):
+            with ZipFile(zip_path, "r") as zf:
+                for name in zf.namelist():
+                    lower_name = name.lower()
+                    if lower_name.endswith((".jpg", ".jpeg", ".png")):
+                        data = zf.read(name)
+                        img = Image.open(io.BytesIO(data)).convert("RGB")
+                        return img, f"{zip_path.name}:{name}"
+
+    plain_tiles = _find_plain_tiles(src_cache)
+    if plain_tiles:
+        tile_path = sorted(plain_tiles)[0]
+        return Image.open(tile_path).convert("RGB"), str(tile_path)
+
+    raise FileNotFoundError(
+        f"No usable cache tile found under {src_cache}. "
+        "Expected either STAMP .zip caches or image tiles."
+    )
+
+
+def _get_macenko_normalizer_from_image(target_img: Image.Image):
+    """Return a fitted Macenko normalizer from an in-memory PIL image."""
+    try:
+        import staintools
+
+        target = np.array(target_img.convert("RGB"))
+        target = staintools.LuminosityStandardizer.standardize(target)
+        normalizer = staintools.StainNormalizer(method="macenko")
+        normalizer.fit(target)
+        return normalizer, "staintools"
+    except ImportError:
+        pass
+
+    try:
+        import torchstain
+        from torchvision import transforms
+
+        to_tensor255 = transforms.Compose([transforms.ToTensor(), lambda x: x * 255])
+        normalizer = torchstain.normalizers.MacenkoNormalizer(backend="torch")
+        normalizer.fit(to_tensor255(target_img.convert("RGB")))
         return normalizer, "torchstain"
     except ImportError:
         pass
@@ -202,13 +260,21 @@ def main():
     parser.add_argument(
         "--target_img",
         type=Path,
-        required=True,
-        help="Reference H&E tile to normalize toward (TCGA style)",
+        default=None,
+        help="Optional reference H&E tile to normalize toward. If omitted or missing, auto-pick one tile from src_cache.",
     )
     parser.add_argument("--workers", type=int, default=8)
     args = parser.parse_args()
 
-    normalizer, backend = _get_macenko_normalizer(args.target_img)
+    if args.target_img is not None and args.target_img.exists():
+        print(f"Using explicit target image: {args.target_img}")
+        normalizer, backend = _get_macenko_normalizer(args.target_img)
+    else:
+        if args.target_img is not None:
+            print(f"Target image not found: {args.target_img}")
+        target_img, target_desc = _extract_auto_target_image(args.src_cache)
+        print(f"Auto-selected target tile: {target_desc}")
+        normalizer, backend = _get_macenko_normalizer_from_image(target_img)
     print(f"Using {backend} Macenko normalizer")
 
     cache_zips = _find_cache_zips(args.src_cache)
