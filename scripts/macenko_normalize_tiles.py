@@ -146,7 +146,7 @@ def _normalize_pil_image(img: Image.Image, normalizer, backend: str) -> np.ndarr
 
         arr = np.array(img.convert("RGB"))
         standardized = staintools.LuminosityStandardizer.standardize(arr)
-        return normalizer.transform(standardized)
+        return _coerce_image_array(normalizer.transform(standardized))
 
     from torchvision import transforms
 
@@ -164,7 +164,67 @@ def _normalize_pil_image(img: Image.Image, normalizer, backend: str) -> np.ndarr
     else:
         norm_t = normalized
 
-    return norm_t.permute(1, 2, 0).clamp(0, 255).byte().cpu().numpy()
+    return _coerce_image_array(norm_t)
+
+
+def _coerce_image_array(arr_like) -> np.ndarray:
+    """
+    Convert torchstain/staintools output to a PIL-safe H x W x 3 uint8 array.
+
+    Handles common variants:
+    - torch.Tensor or np.ndarray
+    - batched or unbatched output
+    - channel-first or channel-last layout
+    - grayscale fallback
+    """
+    try:
+        import torch
+
+        if isinstance(arr_like, torch.Tensor):
+            arr = arr_like.detach().cpu().numpy()
+        else:
+            arr = np.asarray(arr_like)
+    except Exception:
+        arr = np.asarray(arr_like)
+
+    arr = np.squeeze(arr)
+
+    if arr.ndim == 0:
+        raise TypeError(f"Unexpected scalar image output: shape={arr.shape}")
+
+    if arr.ndim == 1:
+        raise TypeError(f"Unexpected 1D image output: shape={arr.shape}")
+
+    if arr.ndim == 2:
+        arr = np.stack([arr, arr, arr], axis=-1)
+    elif arr.ndim == 3:
+        # Channel-first cases: CxHxW
+        if arr.shape[0] in (1, 3) and arr.shape[-1] not in (1, 3):
+            arr = np.transpose(arr, (1, 2, 0))
+        # Still single-channel after transpose/squeeze.
+        if arr.shape[-1] == 1:
+            arr = np.repeat(arr, 3, axis=-1)
+        # Rare case: HxWx224 etc. Try channel-first reinterpretation if last dim is invalid.
+        elif arr.shape[-1] not in (3, 4) and arr.shape[0] in (1, 3):
+            arr = np.transpose(arr, (1, 2, 0))
+            if arr.shape[-1] == 1:
+                arr = np.repeat(arr, 3, axis=-1)
+    else:
+        raise TypeError(f"Unexpected image rank: shape={arr.shape}")
+
+    if arr.ndim != 3:
+        raise TypeError(f"Failed to coerce image to rank-3 array: shape={arr.shape}")
+
+    if arr.shape[-1] > 3:
+        arr = arr[..., :3]
+
+    if arr.dtype != np.uint8:
+        arr = np.clip(arr, 0, 255).astype(np.uint8)
+
+    if arr.shape[-1] != 3:
+        raise TypeError(f"Failed to coerce image to 3 channels: shape={arr.shape}, dtype={arr.dtype}")
+
+    return arr
 
 
 def normalize_tile_file(src: Path, dst: Path, normalizer, backend: str) -> bool:
