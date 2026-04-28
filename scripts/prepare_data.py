@@ -167,6 +167,11 @@ def make_slide_table_ourdata(feature_dir: Path, clinical_df: pd.DataFrame) -> pd
     """
     h5_files = list(feature_dir.rglob("*.h5"))
     print(f"Found {len(h5_files)} .h5 files in {feature_dir}")
+    if not h5_files:
+        raise FileNotFoundError(
+            f"No .h5 files found in {feature_dir}. "
+            "Run feature extraction first, then regenerate the slide table."
+        )
 
     # Build slide table
     # The FILENAME column should be relative to feature_dir
@@ -206,6 +211,11 @@ def make_slide_table_tcga(feature_dir: Path, clinical_df: pd.DataFrame) -> pd.Da
     """
     h5_files = list(feature_dir.rglob("*.h5"))
     print(f"Found {len(h5_files)} .h5 files in {feature_dir}")
+    if not h5_files:
+        raise FileNotFoundError(
+            f"No .h5 files found in {feature_dir}. "
+            "Run feature extraction first, then regenerate the slide table."
+        )
 
     rows = []
     for h5_file in h5_files:

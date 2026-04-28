@@ -29,10 +29,22 @@ import io
 import shutil
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from pathlib import Path
+from threading import Lock
 from zipfile import ZIP_DEFLATED, ZipFile
 
 import numpy as np
 from PIL import Image
+
+
+_FIRST_ERROR_LOCK = Lock()
+_FIRST_ERROR_MESSAGE: str | None = None
+
+
+def _record_first_error(message: str) -> None:
+    global _FIRST_ERROR_MESSAGE
+    with _FIRST_ERROR_LOCK:
+        if _FIRST_ERROR_MESSAGE is None:
+            _FIRST_ERROR_MESSAGE = message
 
 
 def _get_macenko_normalizer(target_path: Path):
@@ -135,8 +147,20 @@ def _normalize_pil_image(img: Image.Image, normalizer, backend: str) -> np.ndarr
     from torchvision import transforms
 
     to_tensor255 = transforms.Compose([transforms.ToTensor(), lambda x: x * 255])
-    norm_t, _, _ = normalizer.normalize(to_tensor255(img.convert("RGB")), stains=False)
-    return norm_t.permute(1, 2, 0).clamp(0, 255).byte().numpy()
+    input_tensor = to_tensor255(img.convert("RGB"))
+
+    # torchstain versions differ in normalize() return signatures.
+    try:
+        normalized = normalizer.normalize(input_tensor, stains=False)
+    except TypeError:
+        normalized = normalizer.normalize(input_tensor)
+
+    if isinstance(normalized, tuple):
+        norm_t = normalized[0]
+    else:
+        norm_t = normalized
+
+    return norm_t.permute(1, 2, 0).clamp(0, 255).byte().cpu().numpy()
 
 
 def normalize_tile_file(src: Path, dst: Path, normalizer, backend: str) -> bool:
@@ -147,7 +171,8 @@ def normalize_tile_file(src: Path, dst: Path, normalizer, backend: str) -> bool:
         dst.parent.mkdir(parents=True, exist_ok=True)
         Image.fromarray(norm).save(dst)
         return True
-    except Exception:
+    except Exception as e:
+        _record_first_error(f"{src}: {type(e).__name__}: {e}")
         dst.parent.mkdir(parents=True, exist_ok=True)
         shutil.copy2(src, dst)
         return False
@@ -182,7 +207,10 @@ def normalize_cache_zip(src_zip: Path, dst_zip: Path, normalizer, backend: str) 
                     Image.fromarray(norm).save(out_buf, format=fmt)
                     zout.writestr(info.filename, out_buf.getvalue())
                     normalized += 1
-                except Exception:
+                except Exception as e:
+                    _record_first_error(
+                        f"{src_zip}:{info.filename}: {type(e).__name__}: {e}"
+                    )
                     zout.writestr(info.filename, data)
                     fallback += 1
             else:
@@ -221,6 +249,8 @@ def _run_plain_mode(src_cache: Path, dst_cache: Path, normalizer, backend: str, 
         f"\nDone. {len(tiles) - failed}/{len(tiles)} normalized, "
         f"{failed} copied as-is (normalization failed)."
     )
+    if _FIRST_ERROR_MESSAGE is not None:
+        print(f"First normalization error: {_FIRST_ERROR_MESSAGE}")
     print(f"Output: {dst_cache}")
 
 
@@ -250,6 +280,8 @@ def _run_zip_mode(src_cache: Path, dst_cache: Path, normalizer, backend: str, wo
         f"\nDone. {total_normalized} tiles normalized, "
         f"{total_fallback} copied as-is (normalization failed)."
     )
+    if _FIRST_ERROR_MESSAGE is not None:
+        print(f"First normalization error: {_FIRST_ERROR_MESSAGE}")
     print(f"Output: {dst_cache}")
 
 
