@@ -1,9 +1,3 @@
-# ============================================================
-# Exp16: Macenko-normalized TCGA tiles + CONCH1.5 features +
-# existing exp01/exp11 backbone with repeated sub-bag inference.
-# Goal: isolate whether stain normalization can recover external AUROC.
-# ============================================================
-
 deployment:
   output_dir: "/data3/chensx/STAMP/outputs/deploy/exp16_macenko_conch_subbag"
 
