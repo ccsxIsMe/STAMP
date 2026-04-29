@@ -1,0 +1,37 @@
+# ============================================================
+# Exp17: Train TransMIL on Macenko-normalized Ourdata CONCH1.5
+# features, and evaluate with repeated sub-bag inference.
+# Goal: reduce stain/domain mismatch between train and TCGA test.
+# ============================================================
+
+crossval:
+  output_dir: "/data3/chensx/STAMP/outputs/crossval/exp17_macenko"
+
+  clini_table: "/data3/chensx/STAMP/outputs/tables/ourdata_clinical_merged.csv"
+  feature_dir: "/data3/chensx/STAMP/outputs/features/ourdata_conch1_5_macenko"
+  slide_table: "/data3/chensx/STAMP/outputs/tables/ourdata_slide_table_macenko.csv"
+
+  task: "classification"
+  ground_truth_label: "Early recurrence"
+  categories: ["0", "1"]
+  patient_label: "PATIENT"
+  filename_label: "FILENAME"
+  n_splits: 5
+
+advanced_config:
+  seed: 42
+  max_epochs: 32
+  patience: 16
+  batch_size: 64
+  bag_size: 512
+  eval_bag_size: 512
+  eval_sample_count: 8
+  eval_random_sampling: true
+  max_lr: 1e-4
+  div_factor: 25.0
+
+  model_name: "trans_mil"
+
+  model_params:
+    trans_mil:
+      dim_hidden: 512

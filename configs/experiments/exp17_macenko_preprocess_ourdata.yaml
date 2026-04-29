@@ -1,0 +1,20 @@
+# ============================================================
+# Exp17 Step 1: Re-extract Ourdata CONCH1.5 features from
+# Macenko-normalized STAMP tile cache.
+# Goal: train and test in a more consistent stain space.
+# ============================================================
+
+preprocessing:
+  output_dir: "/data3/chensx/STAMP/outputs/features/ourdata_conch1_5_macenko"
+
+  wsi_dir: "/data3/chensx/Ourdata/Slides"
+  extractor: "conch1_5"
+  device: "cuda"
+
+  cache_dir: "/data3/chensx/STAMP/outputs/cache/ourdata_macenko"
+  cache_tiles_ext: "jpg"
+
+  tile_size_um: 256.0
+  tile_size_px: 224
+  brightness_cutoff: 240
+  max_workers: 8
