@@ -1,9 +1,5 @@
 """
-Attention-Based MIL (ABMIL) — Ilse et al., NeurIPS 2018
-"Attention-based Deep Multiple Instance Learning"
-https://arxiv.org/abs/1802.04712
-
-Gated attention variant: A = softmax(W * (tanh(V*H) ⊙ sigmoid(U*H)))
+Attention-Based MIL (ABMIL), adapted for STAMP.
 """
 
 import torch
@@ -14,14 +10,7 @@ from torch import Tensor, nn
 
 
 class ABMIL(nn.Module):
-    """Gated Attention-Based MIL aggregator.
-
-    Args:
-        dim_input:   Feature dimension of each patch (from extractor).
-        dim_hidden:  Projection dimension inside attention layers.
-        dim_output:  Number of output classes.
-        dropout:     Dropout on the patch projection.
-    """
+    """Gated Attention-Based MIL aggregator."""
 
     def __init__(
         self,
@@ -36,12 +25,24 @@ class ABMIL(nn.Module):
             nn.ReLU(),
             nn.Dropout(dropout),
         )
-        # Gated attention: two parallel branches
-        self.attn_V = nn.Linear(dim_hidden, dim_hidden)   # tanh branch
-        self.attn_U = nn.Linear(dim_hidden, dim_hidden)   # sigmoid gate
-        self.attn_w = nn.Linear(dim_hidden, 1)            # scalar attention weight
-
+        self.attn_V = nn.Linear(dim_hidden, dim_hidden)
+        self.attn_U = nn.Linear(dim_hidden, dim_hidden)
+        self.attn_w = nn.Linear(dim_hidden, 1)
         self.classifier = nn.Linear(dim_hidden, dim_output)
+
+    @jaxtyped(typechecker=beartype)
+    def encode_bag(
+        self,
+        h: Float[Tensor, "batch tiles dim_input"],
+        **kwargs,
+    ) -> Float[Tensor, "batch dim_hidden"]:
+        _ = kwargs
+        h = self.feature_proj(h)
+        attn_v = torch.tanh(self.attn_V(h))
+        attn_u = torch.sigmoid(self.attn_U(h))
+        attn = self.attn_w(attn_v * attn_u)
+        attn = F.softmax(attn, dim=1)
+        return (attn * h).sum(dim=1)
 
     @jaxtyped(typechecker=beartype)
     def forward(
@@ -49,16 +50,4 @@ class ABMIL(nn.Module):
         h: Float[Tensor, "batch tiles dim_input"],
         **kwargs,
     ) -> Float[Tensor, "batch dim_output"]:
-        # h: (B, N, D)  →  project to hidden dim
-        h = self.feature_proj(h)                          # (B, N, H)
-
-        # Gated attention scores
-        A_V = torch.tanh(self.attn_V(h))                  # (B, N, H)
-        A_U = torch.sigmoid(self.attn_U(h))               # (B, N, H)
-        A = self.attn_w(A_V * A_U)                        # (B, N, 1)
-        A = F.softmax(A, dim=1)                            # (B, N, 1)
-
-        # Weighted sum → bag representation
-        M = (A * h).sum(dim=1)                            # (B, H)
-
-        return self.classifier(M)                          # (B, dim_output)
+        return self.classifier(self.encode_bag(h, **kwargs))

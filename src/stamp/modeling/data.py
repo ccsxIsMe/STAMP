@@ -82,6 +82,38 @@ class PatientData(Generic[GroundTruthType]):
     feature_files: Iterable[FeaturePath | _BinaryIOLike]
 
 
+def load_unlabeled_patient_data_(
+    *,
+    feature_dir: Path,
+    slide_table: Path,
+    patient_label: PandasLabel,
+    filename_label: PandasLabel,
+) -> tuple[Mapping[PatientId, PatientData[None]], str]:
+    """Load target-domain patient bags without requiring labels."""
+    feature_type = detect_feature_type(feature_dir)
+    if feature_type not in ("tile", "slide"):
+        raise ValueError(
+            f"Unlabeled domain adaptation currently supports tile/slide features only, got '{feature_type}'."
+        )
+
+    slide_to_patient: Final[dict[FeaturePath, PatientId]] = slide_to_patient_from_slide_table_(
+        slide_table_path=slide_table,
+        feature_dir=feature_dir,
+        patient_label=patient_label,
+        filename_label=filename_label,
+    )
+
+    patient_to_ground_truth: dict[PatientId, None] = {
+        patient_id: None for patient_id in set(slide_to_patient.values())
+    }
+    patient_to_data = filter_complete_patient_data_(
+        patient_to_ground_truth=patient_to_ground_truth,
+        slide_to_patient=slide_to_patient,
+        drop_patients_with_missing_ground_truth=False,
+    )
+    return cast(Mapping[PatientId, PatientData[None]], patient_to_data), feature_type
+
+
 def tile_bag_dataloader(
     *,
     patient_data: Sequence[PatientData[GroundTruth | None | dict]],

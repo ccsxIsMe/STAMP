@@ -195,15 +195,21 @@ class LitBaseClassifier(Base):
         classification_loss: str = "cross_entropy",
         label_smoothing: float = 0.0,
         focal_gamma: float = 2.0,
+        use_coral: bool = False,
+        coral_weight: float = 0.0,
+        target_train_dl: Any | None = None,
         **kwargs,
     ) -> None:
+        model_metadata = dict(kwargs)
         super().__init__(
             model_class=model_class,
             ground_truth_label=ground_truth_label,
             categories=categories,
             category_weights=category_weights,
             dim_input=dim_input,
-            **kwargs,
+            use_coral=use_coral,
+            coral_weight=coral_weight,
+            **model_metadata,
         )
         self.ground_truth_label = ground_truth_label
 
@@ -218,7 +224,7 @@ class LitBaseClassifier(Base):
             )
 
         self.model: nn.Module = self._build_backbone(
-            model_class, dim_input, len(categories), kwargs
+            model_class, dim_input, len(categories), model_metadata
         )
 
         self.class_weights = (
@@ -227,6 +233,10 @@ class LitBaseClassifier(Base):
         self.classification_loss = classification_loss
         self.label_smoothing = label_smoothing
         self.focal_gamma = focal_gamma
+        self.use_coral = use_coral
+        self.coral_weight = coral_weight
+        self._target_train_dl = target_train_dl
+        self._target_train_iterator = None
         self.train_auroc = MulticlassAUROC(len(categories))
         self.valid_auroc = MulticlassAUROC(len(categories))
         self.test_auroc = MulticlassAUROC(len(categories))
@@ -238,7 +248,13 @@ class LitBaseClassifier(Base):
                 "label_smoothing is only supported with classification_loss='cross_entropy'."
             )
 
-        self.hparams.update({"task": "classification"})
+        self.hparams.update(
+            {
+                "task": "classification",
+                "use_coral": use_coral,
+                "coral_weight": coral_weight,
+            }
+        )
 
     def _compute_classification_loss(
         self, logits: Tensor, targets: Tensor
@@ -279,6 +295,47 @@ class LitBaseClassifier(Base):
             "Expected 'cross_entropy' or 'focal'."
         )
 
+    @staticmethod
+    def _coral_loss(
+        source_embeddings: Tensor,
+        target_embeddings: Tensor,
+    ) -> Loss:
+        if source_embeddings.ndim != 2 or target_embeddings.ndim != 2:
+            raise ValueError("CORAL expects tensors of shape [batch, dim].")
+        if source_embeddings.size(1) != target_embeddings.size(1):
+            raise ValueError(
+                "Source and target embeddings must have the same feature dimension."
+            )
+
+        source_centered = source_embeddings - source_embeddings.mean(
+            dim=0, keepdim=True
+        )
+        target_centered = target_embeddings - target_embeddings.mean(
+            dim=0, keepdim=True
+        )
+        source_cov = source_centered.T @ source_centered / max(
+            source_embeddings.size(0) - 1, 1
+        )
+        target_cov = target_centered.T @ target_centered / max(
+            target_embeddings.size(0) - 1, 1
+        )
+        return (source_cov - target_cov).pow(2).mean()
+
+    def _next_target_batch(self) -> Any:
+        if self._target_train_dl is None:
+            raise RuntimeError(
+                "use_coral=True but no target-domain dataloader was provided."
+            )
+
+        if self._target_train_iterator is None:
+            self._target_train_iterator = iter(self._target_train_dl)
+
+        try:
+            return next(self._target_train_iterator)
+        except StopIteration:
+            self._target_train_iterator = iter(self._target_train_dl)
+            return next(self._target_train_iterator)
+
 
 class LitTileClassifier(_TileLevelMixin, LitBaseClassifier):
     """
@@ -294,6 +351,28 @@ class LitTileClassifier(_TileLevelMixin, LitBaseClassifier):
         bags: Bags,
     ) -> Float[Tensor, "batch logit"]:
         return self.model(bags)
+
+    def _encode_bag_representation(
+        self,
+        *,
+        bags: Bags,
+        coords: CoordinatesBatch,
+        mask: Bool[Tensor, "batch tile"] | None,
+    ) -> Tensor:
+        encode_bag = getattr(self.model, "encode_bag", None)
+        if encode_bag is None:
+            raise RuntimeError(
+                "CORAL requires a backbone exposing `encode_bag(...)`, "
+                f"but {type(self.model).__name__} does not provide it."
+            )
+
+        param_dtype = next(self.model.parameters()).dtype
+        bags = bags.to(device=self.device, dtype=param_dtype)
+        coords = coords.to(device=self.device, dtype=param_dtype)
+        if mask is not None:
+            mask = mask.to(device=self.device)
+
+        return encode_bag(bags, coords=coords, mask=mask)
 
     def _step(
         self,
@@ -356,7 +435,71 @@ class LitTileClassifier(_TileLevelMixin, LitBaseClassifier):
         batch: tuple[Bags, CoordinatesBatch, BagSizes, EncodedTargets] | list[Tensor],
         batch_idx: int,
     ) -> Loss:
-        return self._step(batch=batch, step_name="training", use_mask=False)
+        bags, coords, bag_sizes, targets = batch
+        _ = bag_sizes, batch_idx
+        mask = None
+
+        logits = self.model(bags, coords=coords, mask=mask)
+        source_loss = self._compute_classification_loss(logits, targets)
+        total_loss = source_loss
+
+        self.log(
+            "training_source_loss",
+            source_loss,
+            on_step=False,
+            on_epoch=True,
+            sync_dist=True,
+        )
+
+        if self.use_coral:
+            target_bags, target_coords, target_bag_sizes, _ = self._next_target_batch()
+            _ = target_bag_sizes
+
+            source_embeddings = self._encode_bag_representation(
+                bags=bags,
+                coords=coords,
+                mask=mask,
+            )
+            target_embeddings = self._encode_bag_representation(
+                bags=target_bags,
+                coords=target_coords,
+                mask=None,
+            )
+            coral_loss = self._coral_loss(source_embeddings, target_embeddings)
+            total_loss = total_loss + self.coral_weight * coral_loss
+
+            self.log(
+                "training_coral_loss",
+                coral_loss,
+                on_step=False,
+                on_epoch=True,
+                sync_dist=True,
+            )
+
+        self.log(
+            "training_loss",
+            total_loss,
+            on_step=False,
+            on_epoch=True,
+            prog_bar=True,
+            sync_dist=True,
+        )
+        self.log(
+            "training_total_loss",
+            total_loss,
+            on_step=False,
+            on_epoch=True,
+            sync_dist=True,
+        )
+        self.train_auroc.update(logits, targets.long().argmax(dim=-1))
+        self.log(
+            "training_auroc",
+            self.train_auroc,
+            on_step=False,
+            on_epoch=True,
+            sync_dist=True,
+        )
+        return total_loss
 
     def validation_step(
         self,

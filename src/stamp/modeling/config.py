@@ -53,6 +53,9 @@ class TrainConfig(BaseModel):
 class CrossvalConfig(TrainConfig):
     n_splits: int = Field(5, ge=2)
     task: Task | None = Field(default="classification")
+    target_clini_table: Path | None = None
+    target_slide_table: Path | None = None
+    target_feature_dir: Path | None = None
 
 
 class DeploymentConfig(BaseModel):
@@ -196,6 +199,8 @@ class AdvancedConfig(BaseModel):
     classification_loss: Literal["cross_entropy", "focal"] = "cross_entropy"
     label_smoothing: float = Field(0.0, ge=0.0, lt=1.0)
     focal_gamma: float = Field(2.0, ge=0.0)
+    use_coral: bool = False
+    coral_weight: float = Field(0.0, ge=0.0)
     model_name: ModelName | None = Field(
         default=None,
         description='Optional. "vit" or "mlp" are defaults based on feature type.',

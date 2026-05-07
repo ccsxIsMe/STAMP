@@ -12,6 +12,7 @@ from stamp.modeling.config import AdvancedConfig, CrossvalConfig
 from stamp.modeling.data import (
     PatientData,
     create_dataloader,
+    load_unlabeled_patient_data_,
     load_patient_data_,
     log_patient_class_summary,
 )
@@ -249,6 +250,43 @@ def categorical_crossval_(
                 deterministic_sampling=(not advanced.eval_random_sampling),
             )
 
+            target_train_dl = None
+            if advanced.use_coral:
+                if config.target_feature_dir is None or config.target_slide_table is None:
+                    raise ValueError(
+                        "advanced_config.use_coral=true requires "
+                        "`target_feature_dir` and `target_slide_table`."
+                    )
+
+                target_patient_to_data, target_feature_type = load_unlabeled_patient_data_(
+                    feature_dir=config.target_feature_dir,
+                    slide_table=config.target_slide_table,
+                    patient_label=config.patient_label,
+                    filename_label=config.filename_label,
+                )
+                if target_feature_type != feature_type:
+                    raise ValueError(
+                        "Source and target feature types must match for CORAL. "
+                        f"Got source='{feature_type}' and target='{target_feature_type}'."
+                    )
+
+                target_train_dl, _ = create_dataloader(
+                    feature_type=target_feature_type,
+                    task=config.task,
+                    patient_data=list(target_patient_to_data.values()),
+                    bag_size=advanced.bag_size,
+                    batch_size=advanced.batch_size,
+                    shuffle=True,
+                    num_workers=advanced.num_workers,
+                    transform=None,
+                    categories=train_categories,
+                )
+                _logger.info(
+                    "CORAL enabled with %s unlabeled target patients from %s",
+                    len(target_patient_to_data),
+                    config.target_feature_dir,
+                )
+
             # Infer feature dimension
             batch = next(iter(train_dl))
             if feature_type == "tile":
@@ -261,6 +299,7 @@ def categorical_crossval_(
             model = setup_model_from_dataloaders(
                 train_dl=train_dl,
                 valid_dl=test_dl,
+                target_train_dl=target_train_dl,
                 task=config.task,
                 train_categories=train_categories,
                 dim_feats=dim_feats,

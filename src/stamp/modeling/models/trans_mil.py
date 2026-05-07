@@ -13,8 +13,6 @@ from einops import rearrange, reduce
 from jaxtyping import Bool, Float, jaxtyped
 from torch import Tensor, einsum, nn
 
-# --- Helpers ---
-
 
 def exists(val):
     return val is not None
@@ -27,17 +25,16 @@ def moore_penrose_iter_pinv(x: Tensor, iters: int = 6) -> Tensor:
     row = abs_x.sum(dim=-2)
     z = rearrange(x, "... i j -> ... j i") / (torch.max(col) * torch.max(row))
 
-    I_mat = torch.eye(x.shape[-1], device=device)
-    I_mat = rearrange(I_mat, "i j -> () i j")
+    identity = torch.eye(x.shape[-1], device=device)
+    identity = rearrange(identity, "i j -> () i j")
 
     for _ in range(iters):
         xz = x @ z
-        z = 0.25 * z @ (13 * I_mat - (xz @ (15 * I_mat - (xz @ (7 * I_mat - xz)))))
+        z = 0.25 * z @ (
+            13 * identity - (xz @ (15 * identity - (xz @ (7 * identity - xz))))
+        )
 
     return z
-
-
-# --- Nystrom Attention ---
 
 
 class NystromAttention(nn.Module):
@@ -62,7 +59,6 @@ class NystromAttention(nn.Module):
 
         inner_dim = heads * dim_head
         self.to_qkv = nn.Linear(dim, inner_dim * 3, bias=False)
-
         self.to_out = nn.Sequential(nn.Linear(inner_dim, dim), nn.Dropout(dropout))
 
         self.residual = residual
@@ -85,7 +81,7 @@ class NystromAttention(nn.Module):
         return_attn: bool = False,
         return_attn_matrices: bool = False,
     ) -> Float[Tensor, "batch n dim"]:
-        b, n, _ = x.shape
+        _, n, _ = x.shape
         h, m, iters, eps = (
             self.heads,
             self.num_landmarks,
@@ -93,7 +89,6 @@ class NystromAttention(nn.Module):
             self.eps,
         )
 
-        # Pad sequence to be divisible by landmarks
         remainder = n % m
         if remainder > 0:
             pad_len = m - remainder
@@ -110,13 +105,13 @@ class NystromAttention(nn.Module):
 
         q = q * self.scale
 
-        len = ceil(n / m)
-        q_landmarks = reduce(q, "... (n l) d -> ... n d", "sum", l=len)
-        k_landmarks = reduce(k, "... (n l) d -> ... n d", "sum", l=len)
+        chunk_len = ceil(n / m)
+        q_landmarks = reduce(q, "... (n l) d -> ... n d", "sum", l=chunk_len)
+        k_landmarks = reduce(k, "... (n l) d -> ... n d", "sum", l=chunk_len)
 
-        divisor = len
+        divisor = chunk_len
         if mask is not None:
-            mask_landmarks_sum = reduce(mask, "... (n l) -> ... n", "sum", l=len)
+            mask_landmarks_sum = reduce(mask, "... (n l) -> ... n", "sum", l=chunk_len)
             divisor = mask_landmarks_sum[..., None] + eps
             mask_landmarks = mask_landmarks_sum > 0
 
@@ -144,7 +139,6 @@ class NystromAttention(nn.Module):
 
         attn1, attn2, attn3 = map(lambda t: t.softmax(dim=-1), (sim1, sim2, sim3))
         attn2_inv = moore_penrose_iter_pinv(attn2, iters)
-
         out = (attn1 @ attn2_inv) @ (attn3 @ v)
 
         if self.residual:
@@ -156,14 +150,11 @@ class NystromAttention(nn.Module):
 
         if return_attn_matrices:
             return out, (attn1, attn2_inv, attn3)  # type: ignore
-        elif return_attn:
+        if return_attn:
             attn = attn1 @ attn2_inv @ attn3
             return out, attn  # type: ignore
 
         return out
-
-
-# --- Transformer blocks ---
 
 
 class PreNorm(nn.Module):
@@ -274,13 +265,12 @@ class PPEG(nn.Module):
     def forward(
         self, x: Float[Tensor, "batch tokens dim"], H: int, W: int
     ) -> Float[Tensor, "batch tokens dim"]:
-        B, _, C = x.shape
+        batch_size, _, channels = x.shape
         cls_token, feat_token = x[:, 0], x[:, 1:]
-        cnn_feat = feat_token.transpose(1, 2).view(B, C, H, W)
+        cnn_feat = feat_token.transpose(1, 2).view(batch_size, channels, H, W)
         x = self.proj(cnn_feat) + cnn_feat + self.proj1(cnn_feat) + self.proj2(cnn_feat)
         x = x.flatten(2).transpose(1, 2)
-        x = torch.cat((cls_token.unsqueeze(1), x), dim=1)
-        return x
+        return torch.cat((cls_token.unsqueeze(1), x), dim=1)
 
 
 class ResidualFeatureAdapterBlock(nn.Module):
@@ -359,32 +349,30 @@ class TransMIL(nn.Module):
         self._fc2 = nn.Linear(dim_hidden, self.n_classes)
 
     @jaxtyped(typechecker=beartype)
+    def encode_bag(
+        self, h: Float[Tensor, "batch tiles dim_input"], **kwargs
+    ) -> Float[Tensor, "batch dim_hidden"]:
+        _ = kwargs
+        h = self._fc1(h)
+        h = self.feature_adapter(h)
+
+        n_tiles = h.shape[1]
+        side = int(np.ceil(np.sqrt(n_tiles)))
+        add_length = side * side - n_tiles
+        if add_length > 0:
+            h = torch.cat([h, h[:, :add_length, :]], dim=1)
+
+        batch_size = h.shape[0]
+        cls_tokens = self.cls_token.expand(batch_size, -1, -1).to(h.device)
+        h = torch.cat((cls_tokens, h), dim=1)
+
+        h = self.layer1(h)
+        h = self.pos_layer(h, side, side)
+        h = self.layer2(h)
+        return self.norm(h)[:, 0]
+
+    @jaxtyped(typechecker=beartype)
     def forward(
         self, h: Float[Tensor, "batch tiles dim_input"], **kwargs
     ) -> Float[Tensor, "batch n_classes"]:
-        # Project to lower dim
-        h = self._fc1(h)  # [B, n, C]
-        h = self.feature_adapter(h)
-
-        # Pad to square for reshaping
-        H = h.shape[1]
-        _H = _W = int(np.ceil(np.sqrt(H)))
-        add_length = _H * _W - H
-        h = torch.cat([h, h[:, :add_length, :]], dim=1)  # [B, N, C]
-
-        # Add class token
-        B = h.shape[0]
-        cls_tokens = self.cls_token.expand(B, -1, -1).to(h.device)
-        h = torch.cat((cls_tokens, h), dim=1)
-
-        # Transformer → Positional Encoding → Transformer
-        h = self.layer1(h)
-        h = self.pos_layer(h, _H, _W)
-        h = self.layer2(h)
-
-        # Class token output
-        h = self.norm(h)[:, 0]
-
-        # Classifier
-        logits = self._fc2(h)  # [B, n_classes]
-        return logits
+        return self._fc2(self.encode_bag(h, **kwargs))
