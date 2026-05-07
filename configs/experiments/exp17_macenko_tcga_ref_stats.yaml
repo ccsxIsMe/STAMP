@@ -1,0 +1,12 @@
+statistics:
+  output_dir: "/data3/chensx/STAMP/outputs/stats/exp17_macenko_tcga_ref"
+  task: "classification"
+  ground_truth_label: "Early recurrence"
+  true_class: "1"
+
+  pred_csvs:
+    - "/data3/chensx/STAMP/outputs/crossval/exp17_macenko_tcga_ref/split-0/patient-preds.csv"
+    - "/data3/chensx/STAMP/outputs/crossval/exp17_macenko_tcga_ref/split-1/patient-preds.csv"
+    - "/data3/chensx/STAMP/outputs/crossval/exp17_macenko_tcga_ref/split-2/patient-preds.csv"
+    - "/data3/chensx/STAMP/outputs/crossval/exp17_macenko_tcga_ref/split-3/patient-preds.csv"
+    - "/data3/chensx/STAMP/outputs/crossval/exp17_macenko_tcga_ref/split-4/patient-preds.csv"
