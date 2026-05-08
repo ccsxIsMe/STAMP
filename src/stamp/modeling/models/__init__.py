@@ -197,6 +197,7 @@ class LitBaseClassifier(Base):
         focal_gamma: float = 2.0,
         use_coral: bool = False,
         coral_weight: float = 0.0,
+        coral_warmup_epochs: int = 0,
         target_train_dl: Any | None = None,
         **kwargs,
     ) -> None:
@@ -209,6 +210,7 @@ class LitBaseClassifier(Base):
             dim_input=dim_input,
             use_coral=use_coral,
             coral_weight=coral_weight,
+            coral_warmup_epochs=coral_warmup_epochs,
             **model_metadata,
         )
         self.ground_truth_label = ground_truth_label
@@ -235,6 +237,7 @@ class LitBaseClassifier(Base):
         self.focal_gamma = focal_gamma
         self.use_coral = use_coral
         self.coral_weight = coral_weight
+        self.coral_warmup_epochs = coral_warmup_epochs
         self._target_train_dl = target_train_dl
         self._target_train_iterator = None
         self.train_auroc = MulticlassAUROC(len(categories))
@@ -253,6 +256,7 @@ class LitBaseClassifier(Base):
                 "task": "classification",
                 "use_coral": use_coral,
                 "coral_weight": coral_weight,
+                "coral_warmup_epochs": coral_warmup_epochs,
             }
         )
 
@@ -335,6 +339,16 @@ class LitBaseClassifier(Base):
         except StopIteration:
             self._target_train_iterator = iter(self._target_train_dl)
             return next(self._target_train_iterator)
+
+    def _current_coral_weight(self) -> float:
+        if not self.use_coral or self.coral_weight <= 0:
+            return 0.0
+        if self.coral_warmup_epochs <= 0:
+            return self.coral_weight
+
+        current_epoch = int(getattr(self, "current_epoch", 0))
+        warmup_progress = min((current_epoch + 1) / self.coral_warmup_epochs, 1.0)
+        return self.coral_weight * warmup_progress
 
 
 class LitTileClassifier(_TileLevelMixin, LitBaseClassifier):
@@ -466,11 +480,19 @@ class LitTileClassifier(_TileLevelMixin, LitBaseClassifier):
                 mask=None,
             )
             coral_loss = self._coral_loss(source_embeddings, target_embeddings)
-            total_loss = total_loss + self.coral_weight * coral_loss
+            coral_weight = self._current_coral_weight()
+            total_loss = total_loss + coral_weight * coral_loss
 
             self.log(
                 "training_coral_loss",
                 coral_loss,
+                on_step=False,
+                on_epoch=True,
+                sync_dist=True,
+            )
+            self.log(
+                "training_coral_weight",
+                coral_weight,
                 on_step=False,
                 on_epoch=True,
                 sync_dist=True,

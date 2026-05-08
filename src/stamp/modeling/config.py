@@ -201,6 +201,7 @@ class AdvancedConfig(BaseModel):
     focal_gamma: float = Field(2.0, ge=0.0)
     use_coral: bool = False
     coral_weight: float = Field(0.0, ge=0.0)
+    coral_warmup_epochs: int = Field(0, ge=0)
     model_name: ModelName | None = Field(
         default=None,
         description='Optional. "vit" or "mlp" are defaults based on feature type.',

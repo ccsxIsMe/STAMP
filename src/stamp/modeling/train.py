@@ -331,6 +331,7 @@ def setup_model_from_dataloaders(
         "focal_gamma": advanced.focal_gamma,
         "use_coral": advanced.use_coral,
         "coral_weight": advanced.coral_weight,
+        "coral_warmup_epochs": advanced.coral_warmup_epochs,
         "target_train_dl": target_train_dl,
         "dim_input": dim_feats,
         "total_steps": total_steps,

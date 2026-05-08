@@ -1,0 +1,42 @@
+crossval:
+  output_dir: "/data3/chensx/STAMP/outputs/crossval/exp19_transmil_coral_w020"
+
+  clini_table: "/data3/chensx/STAMP/outputs/tables/ourdata_clinical_merged.csv"
+  feature_dir: "/data3/chensx/STAMP/outputs/features/ourdata_conch1_5"
+  slide_table: "/data3/chensx/STAMP/outputs/tables/ourdata_slide_table.csv"
+
+  target_clini_table: "/data3/chensx/STAMP/outputs/tables/tcga_clinical_filtered.csv"
+  target_feature_dir: "/data3/chensx/STAMP/outputs/features/tcga_conch1_5_macenko"
+  target_slide_table: "/data3/chensx/STAMP/outputs/tables/tcga_slide_table_macenko.csv"
+
+  task: "classification"
+  ground_truth_label: "Early recurrence"
+  categories: ["0", "1"]
+  patient_label: "PATIENT"
+  filename_label: "FILENAME"
+  n_splits: 5
+
+advanced_config:
+  seed: 42
+  max_epochs: 40
+  patience: 18
+  batch_size: 32
+  accumulate_grad_batches: 2
+  bag_size: 512
+  eval_bag_size: 512
+  eval_sample_count: 8
+  eval_random_sampling: true
+  max_lr: 1e-4
+  div_factor: 25.0
+  monitor_metric: "validation_auroc"
+  monitor_mode: "max"
+
+  use_coral: true
+  coral_weight: 0.20
+  coral_warmup_epochs: 8
+
+  model_name: "trans_mil"
+
+  model_params:
+    trans_mil:
+      dim_hidden: 512

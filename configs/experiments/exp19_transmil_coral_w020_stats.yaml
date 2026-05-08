@@ -1,0 +1,12 @@
+statistics:
+  output_dir: "/data3/chensx/STAMP/outputs/stats/exp19_transmil_coral_w020"
+  task: "classification"
+  ground_truth_label: "Early recurrence"
+  true_class: "1"
+
+  pred_csvs:
+    - "/data3/chensx/STAMP/outputs/crossval/exp19_transmil_coral_w020/split-0/patient-preds.csv"
+    - "/data3/chensx/STAMP/outputs/crossval/exp19_transmil_coral_w020/split-1/patient-preds.csv"
+    - "/data3/chensx/STAMP/outputs/crossval/exp19_transmil_coral_w020/split-2/patient-preds.csv"
+    - "/data3/chensx/STAMP/outputs/crossval/exp19_transmil_coral_w020/split-3/patient-preds.csv"
+    - "/data3/chensx/STAMP/outputs/crossval/exp19_transmil_coral_w020/split-4/patient-preds.csv"
