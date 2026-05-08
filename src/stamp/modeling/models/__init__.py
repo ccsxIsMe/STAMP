@@ -364,7 +364,7 @@ class LitBaseClassifier(Base):
     def _next_target_batch(self) -> Any:
         if self._target_train_dl is None:
             raise RuntimeError(
-                "use_coral=True but no target-domain dataloader was provided."
+                "Domain adaptation is enabled but no target-domain dataloader was provided."
             )
 
         if self._target_train_iterator is None:

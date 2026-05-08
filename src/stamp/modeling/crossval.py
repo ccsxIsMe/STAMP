@@ -251,10 +251,10 @@ def categorical_crossval_(
             )
 
             target_train_dl = None
-            if advanced.use_coral:
+            if advanced.use_coral or advanced.use_dann:
                 if config.target_feature_dir is None or config.target_slide_table is None:
                     raise ValueError(
-                        "advanced_config.use_coral=true requires "
+                        "advanced_config.use_coral/use_dann requires "
                         "`target_feature_dir` and `target_slide_table`."
                     )
 
@@ -266,7 +266,7 @@ def categorical_crossval_(
                 )
                 if target_feature_type != feature_type:
                     raise ValueError(
-                        "Source and target feature types must match for CORAL. "
+                        "Source and target feature types must match for domain adaptation. "
                         f"Got source='{feature_type}' and target='{target_feature_type}'."
                     )
 
@@ -281,8 +281,12 @@ def categorical_crossval_(
                     transform=None,
                     categories=train_categories,
                 )
+                method_name = "CORAL" if advanced.use_coral and not advanced.use_dann else (
+                    "DANN" if advanced.use_dann and not advanced.use_coral else "CORAL+DANN"
+                )
                 _logger.info(
-                    "CORAL enabled with %s unlabeled target patients from %s",
+                    "%s enabled with %s unlabeled target patients from %s",
+                    method_name,
                     len(target_patient_to_data),
                     config.target_feature_dir,
                 )
