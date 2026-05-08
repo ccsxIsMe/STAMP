@@ -202,6 +202,11 @@ class AdvancedConfig(BaseModel):
     use_coral: bool = False
     coral_weight: float = Field(0.0, ge=0.0)
     coral_warmup_epochs: int = Field(0, ge=0)
+    use_dann: bool = False
+    domain_loss_weight: float = Field(0.0, ge=0.0)
+    domain_warmup_epochs: int = Field(0, ge=0)
+    domain_hidden_dim: int = Field(256, ge=1)
+    domain_dropout: float = Field(0.1, ge=0.0, lt=1.0)
     model_name: ModelName | None = Field(
         default=None,
         description='Optional. "vit" or "mlp" are defaults based on feature type.',

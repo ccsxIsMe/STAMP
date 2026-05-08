@@ -362,6 +362,16 @@ advanced_config:
   coral_weight: 0.0
   # Linearly ramp CORAL weight from 0 to coral_weight across these epochs.
   coral_warmup_epochs: 0
+  # Enable adversarial domain alignment with gradient reversal.
+  use_dann: false
+  # Weight of the domain-adversarial objective.
+  domain_loss_weight: 0.0
+  # Linearly ramp domain loss weight from 0 to domain_loss_weight.
+  domain_warmup_epochs: 0
+  # Hidden dimension of the domain discriminator MLP.
+  domain_hidden_dim: 256
+  # Dropout in the domain discriminator.
+  domain_dropout: 0.1
   # Select a model regardless of task
   model_name: "vit" # or mlp, linear, trans_mil, trans_mil_fusion, dsmil, dtfd_mil, barspoon
 

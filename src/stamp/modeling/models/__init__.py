@@ -8,6 +8,7 @@ from typing import Any, TypeAlias
 import lightning
 import numpy as np
 import torch
+from torch.autograd import Function
 
 # Use beartype.typing.Mapping to avoid PEP-585 deprecation warnings in beartype
 from beartype.typing import Mapping
@@ -39,6 +40,21 @@ __copyright__ = "Copyright (C) 2025 Minh Duc Nguyen"
 __license__ = "MIT"
 
 Loss: TypeAlias = Float[Tensor, ""]
+
+
+class _GradientReversal(Function):
+    @staticmethod
+    def forward(ctx, x: Tensor, alpha: float) -> Tensor:
+        ctx.alpha = alpha
+        return x.view_as(x)
+
+    @staticmethod
+    def backward(ctx, grad_output: Tensor) -> tuple[Tensor, None]:
+        return -ctx.alpha * grad_output, None
+
+
+def grad_reverse(x: Tensor, alpha: float) -> Tensor:
+    return _GradientReversal.apply(x, alpha)
 
 
 class Base(lightning.LightningModule, ABC):
@@ -198,6 +214,11 @@ class LitBaseClassifier(Base):
         use_coral: bool = False,
         coral_weight: float = 0.0,
         coral_warmup_epochs: int = 0,
+        use_dann: bool = False,
+        domain_loss_weight: float = 0.0,
+        domain_warmup_epochs: int = 0,
+        domain_hidden_dim: int = 256,
+        domain_dropout: float = 0.1,
         target_train_dl: Any | None = None,
         **kwargs,
     ) -> None:
@@ -211,6 +232,11 @@ class LitBaseClassifier(Base):
             use_coral=use_coral,
             coral_weight=coral_weight,
             coral_warmup_epochs=coral_warmup_epochs,
+            use_dann=use_dann,
+            domain_loss_weight=domain_loss_weight,
+            domain_warmup_epochs=domain_warmup_epochs,
+            domain_hidden_dim=domain_hidden_dim,
+            domain_dropout=domain_dropout,
             **model_metadata,
         )
         self.ground_truth_label = ground_truth_label
@@ -238,6 +264,11 @@ class LitBaseClassifier(Base):
         self.use_coral = use_coral
         self.coral_weight = coral_weight
         self.coral_warmup_epochs = coral_warmup_epochs
+        self.use_dann = use_dann
+        self.domain_loss_weight = domain_loss_weight
+        self.domain_warmup_epochs = domain_warmup_epochs
+        self.domain_hidden_dim = domain_hidden_dim
+        self.domain_dropout = domain_dropout
         self._target_train_dl = target_train_dl
         self._target_train_iterator = None
         self.train_auroc = MulticlassAUROC(len(categories))
@@ -257,6 +288,11 @@ class LitBaseClassifier(Base):
                 "use_coral": use_coral,
                 "coral_weight": coral_weight,
                 "coral_warmup_epochs": coral_warmup_epochs,
+                "use_dann": use_dann,
+                "domain_loss_weight": domain_loss_weight,
+                "domain_warmup_epochs": domain_warmup_epochs,
+                "domain_hidden_dim": domain_hidden_dim,
+                "domain_dropout": domain_dropout,
             }
         )
 
@@ -343,12 +379,25 @@ class LitBaseClassifier(Base):
     def _current_coral_weight(self) -> float:
         if not self.use_coral or self.coral_weight <= 0:
             return 0.0
-        if self.coral_warmup_epochs <= 0:
-            return self.coral_weight
+        return self._current_warmup_weight(
+            target_weight=self.coral_weight,
+            warmup_epochs=self.coral_warmup_epochs,
+        )
 
+    def _current_domain_weight(self) -> float:
+        if not self.use_dann or self.domain_loss_weight <= 0:
+            return 0.0
+        return self._current_warmup_weight(
+            target_weight=self.domain_loss_weight,
+            warmup_epochs=self.domain_warmup_epochs,
+        )
+
+    def _current_warmup_weight(self, *, target_weight: float, warmup_epochs: int) -> float:
+        if warmup_epochs <= 0:
+            return target_weight
         current_epoch = int(getattr(self, "current_epoch", 0))
-        warmup_progress = min((current_epoch + 1) / self.coral_warmup_epochs, 1.0)
-        return self.coral_weight * warmup_progress
+        warmup_progress = min((current_epoch + 1) / warmup_epochs, 1.0)
+        return target_weight * warmup_progress
 
 
 class LitTileClassifier(_TileLevelMixin, LitBaseClassifier):
@@ -359,6 +408,27 @@ class LitTileClassifier(_TileLevelMixin, LitBaseClassifier):
     """
 
     supported_features = ["tile"]
+
+    def __init__(self, *args, **kwargs) -> None:
+        super().__init__(*args, **kwargs)
+        self.domain_classifier: nn.Module | None = None
+        if self.use_dann:
+            bag_dim = self._infer_bag_embedding_dim()
+            self.domain_classifier = nn.Sequential(
+                nn.Linear(bag_dim, self.domain_hidden_dim),
+                nn.ReLU(),
+                nn.Dropout(self.domain_dropout),
+                nn.Linear(self.domain_hidden_dim, 2),
+            )
+
+    def _infer_bag_embedding_dim(self) -> int:
+        if hasattr(self.model, "_fc2") and isinstance(self.model._fc2, nn.Linear):
+            return int(self.model._fc2.in_features)
+        if hasattr(self.model, "classifier") and isinstance(self.model.classifier, nn.Linear):
+            return int(self.model.classifier.in_features)
+        raise RuntimeError(
+            f"Unable to infer bag embedding dimension for {type(self.model).__name__}."
+        )
 
     def forward(
         self,
@@ -493,6 +563,64 @@ class LitTileClassifier(_TileLevelMixin, LitBaseClassifier):
             self.log(
                 "training_coral_weight",
                 coral_weight,
+                on_step=False,
+                on_epoch=True,
+                sync_dist=True,
+            )
+
+        if self.use_dann:
+            if self.domain_classifier is None:
+                raise RuntimeError("use_dann=True but domain_classifier was not initialized.")
+
+            target_bags, target_coords, target_bag_sizes, _ = self._next_target_batch()
+            _ = target_bag_sizes
+
+            source_embeddings = self._encode_bag_representation(
+                bags=bags,
+                coords=coords,
+                mask=mask,
+            )
+            target_embeddings = self._encode_bag_representation(
+                bags=target_bags,
+                coords=target_coords,
+                mask=None,
+            )
+
+            domain_weight = self._current_domain_weight()
+            domain_features = torch.cat([source_embeddings, target_embeddings], dim=0)
+            reversed_features = grad_reverse(domain_features, domain_weight)
+            domain_logits = self.domain_classifier(reversed_features)
+            domain_targets = torch.cat(
+                [
+                    torch.zeros(source_embeddings.size(0), dtype=torch.long, device=domain_logits.device),
+                    torch.ones(target_embeddings.size(0), dtype=torch.long, device=domain_logits.device),
+                ],
+                dim=0,
+            )
+            domain_loss = nn.functional.cross_entropy(domain_logits, domain_targets)
+            total_loss = total_loss + domain_loss
+
+            domain_probs = domain_logits.softmax(dim=-1)
+            domain_pred = domain_probs.argmax(dim=-1)
+            domain_acc = (domain_pred == domain_targets).float().mean()
+
+            self.log(
+                "training_domain_loss",
+                domain_loss,
+                on_step=False,
+                on_epoch=True,
+                sync_dist=True,
+            )
+            self.log(
+                "training_domain_weight",
+                domain_weight,
+                on_step=False,
+                on_epoch=True,
+                sync_dist=True,
+            )
+            self.log(
+                "training_domain_acc",
+                domain_acc,
                 on_step=False,
                 on_epoch=True,
                 sync_dist=True,
