@@ -478,6 +478,23 @@ class LitTileClassifier(_TileLevelMixin, LitBaseClassifier):
 
         return encode_bag(bags, coords=coords, mask=mask)
 
+    def _move_batch_to_model_device(
+        self,
+        *,
+        bags: Bags,
+        coords: CoordinatesBatch,
+        mask: Bool[Tensor, "batch tile"] | None = None,
+        targets: EncodedTargets | None = None,
+    ) -> tuple[Bags, CoordinatesBatch, Bool[Tensor, "batch tile"] | None, EncodedTargets | None]:
+        param_dtype = next(self.model.parameters()).dtype
+        bags = bags.to(device=self.device, dtype=param_dtype)
+        coords = coords.to(device=self.device, dtype=param_dtype)
+        if mask is not None:
+            mask = mask.to(device=self.device)
+        if targets is not None:
+            targets = targets.to(device=self.device)
+        return bags, coords, mask, targets
+
     def _step(
         self,
         *,
@@ -649,6 +666,11 @@ class LitTileClassifier(_TileLevelMixin, LitBaseClassifier):
         if self.use_pseudolabels:
             target_bags, target_coords, target_bag_sizes, target_targets = self._next_target_batch()
             _ = target_bag_sizes
+            target_bags, target_coords, _, target_targets = self._move_batch_to_model_device(
+                bags=target_bags,
+                coords=target_coords,
+                targets=target_targets,
+            )
             target_logits = self.model(target_bags, coords=target_coords, mask=None)
             pseudolabel_loss = self._compute_classification_loss(target_logits, target_targets)
             pseudolabel_weight = self._current_pseudolabel_weight()
