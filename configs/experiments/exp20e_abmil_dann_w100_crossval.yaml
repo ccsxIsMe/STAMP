@@ -1,0 +1,44 @@
+crossval:
+  output_dir: "/data3/chensx/STAMP/outputs/crossval/exp20e_abmil_dann_w100"
+
+  clini_table: "/data3/chensx/STAMP/outputs/tables/ourdata_clinical_merged.csv"
+  feature_dir: "/data3/chensx/STAMP/outputs/features/ourdata_conch1_5"
+  slide_table: "/data3/chensx/STAMP/outputs/tables/ourdata_slide_table.csv"
+
+  target_clini_table: "/data3/chensx/STAMP/outputs/tables/tcga_clinical_filtered.csv"
+  target_feature_dir: "/data3/chensx/STAMP/outputs/features/tcga_conch1_5_macenko"
+  target_slide_table: "/data3/chensx/STAMP/outputs/tables/tcga_slide_table_macenko.csv"
+
+  task: "classification"
+  ground_truth_label: "Early recurrence"
+  categories: ["0", "1"]
+  patient_label: "PATIENT"
+  filename_label: "FILENAME"
+  n_splits: 5
+
+advanced_config:
+  seed: 42
+  max_epochs: 40
+  patience: 18
+  batch_size: 64
+  bag_size: 512
+  eval_bag_size: 512
+  eval_sample_count: 8
+  eval_random_sampling: true
+  max_lr: 1e-4
+  div_factor: 25.0
+  monitor_metric: "validation_auroc"
+  monitor_mode: "max"
+
+  use_dann: true
+  domain_loss_weight: 1.00
+  domain_warmup_epochs: 12
+  domain_hidden_dim: 256
+  domain_dropout: 0.1
+
+  model_name: "abmil"
+
+  model_params:
+    abmil:
+      dim_hidden: 256
+      dropout: 0.25
