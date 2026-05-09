@@ -55,6 +55,20 @@ class ABMILClinical(nn.Module):
         return self.pathology_encoder.encode_bag(h, **kwargs)
 
     @jaxtyped(typechecker=beartype)
+    def encode_multimodal(
+        self,
+        h: Float[Tensor, "batch tiles dim_input"],
+        *,
+        clinical: Float[Tensor, "batch clinical_dim"],
+        **kwargs,
+    ) -> Float[Tensor, "batch dim_hidden"]:
+        bag_repr = self.encode_bag(h, **kwargs)
+        clinical_repr = self.clinical_proj(clinical)
+        fusion_input = torch.cat([bag_repr, clinical_repr], dim=-1)
+        gate = self.fusion_gate(fusion_input)
+        return gate * bag_repr + (1.0 - gate) * clinical_repr
+
+    @jaxtyped(typechecker=beartype)
     def forward(
         self,
         h: Float[Tensor, "batch tiles dim_input"],
@@ -62,9 +76,5 @@ class ABMILClinical(nn.Module):
         clinical: Float[Tensor, "batch clinical_dim"],
         **kwargs,
     ) -> Float[Tensor, "batch dim_output"]:
-        bag_repr = self.encode_bag(h, **kwargs)
-        clinical_repr = self.clinical_proj(clinical)
-        fusion_input = torch.cat([bag_repr, clinical_repr], dim=-1)
-        gate = self.fusion_gate(fusion_input)
-        fused_repr = gate * bag_repr + (1.0 - gate) * clinical_repr
+        fused_repr = self.encode_multimodal(h, clinical=clinical, **kwargs)
         return self.classifier(fused_repr)

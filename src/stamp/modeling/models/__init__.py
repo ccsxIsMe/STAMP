@@ -40,6 +40,11 @@ __copyright__ = "Copyright (C) 2025 Minh Duc Nguyen"
 __license__ = "MIT"
 
 Loss: TypeAlias = Float[Tensor, ""]
+TileBatch: TypeAlias = (
+    tuple[Bags, CoordinatesBatch, BagSizes, EncodedTargets]
+    | tuple[Bags, CoordinatesBatch, BagSizes, EncodedTargets, Tensor]
+    | list[Tensor]
+)
 
 
 class _GradientReversal(Function):
@@ -547,19 +552,27 @@ class LitTileClassifier(_TileLevelMixin, LitBaseClassifier):
         bags: Bags,
         coords: CoordinatesBatch,
         mask: Bool[Tensor, "batch tile"] | None,
+        clinical: Tensor | None = None,
     ) -> Tensor:
-        encode_bag = getattr(self.model, "encode_bag", None)
-        if encode_bag is None:
-            raise RuntimeError(
-                "CORAL requires a backbone exposing `encode_bag(...)`, "
-                f"but {type(self.model).__name__} does not provide it."
-            )
-
         param_dtype = next(self.model.parameters()).dtype
         bags = bags.to(device=self.device, dtype=param_dtype)
         coords = coords.to(device=self.device, dtype=param_dtype)
         if mask is not None:
             mask = mask.to(device=self.device)
+        if clinical is not None:
+            clinical = clinical.to(device=self.device, dtype=param_dtype)
+            encode_multimodal = getattr(self.model, "encode_multimodal", None)
+            if encode_multimodal is not None:
+                return encode_multimodal(
+                    bags, coords=coords, mask=mask, clinical=clinical
+                )
+
+        encode_bag = getattr(self.model, "encode_bag", None)
+        if encode_bag is None:
+            raise RuntimeError(
+                "CORAL/DANN requires a backbone exposing `encode_bag(...)` or "
+                f"`encode_multimodal(...)`, but {type(self.model).__name__} does not provide it."
+            )
 
         return encode_bag(bags, coords=coords, mask=mask)
 
@@ -586,7 +599,7 @@ class LitTileClassifier(_TileLevelMixin, LitBaseClassifier):
     def _step(
         self,
         *,
-        batch: tuple[Bags, CoordinatesBatch, BagSizes, EncodedTargets] | list[Tensor],
+        batch: TileBatch,
         step_name: str,
         use_mask: bool,
     ) -> Loss:
@@ -645,7 +658,7 @@ class LitTileClassifier(_TileLevelMixin, LitBaseClassifier):
 
     def training_step(
         self,
-        batch: tuple[Bags, CoordinatesBatch, BagSizes, EncodedTargets] | list[Tensor],
+        batch: TileBatch,
         batch_idx: int,
     ) -> Loss:
         bags, coords, bag_sizes, targets, clinical = self._unpack_tile_batch(batch)
@@ -659,7 +672,7 @@ class LitTileClassifier(_TileLevelMixin, LitBaseClassifier):
         )
         source_loss = self._compute_classification_loss(logits, targets)
         total_loss = source_loss
-        target_batch: tuple[Tensor, Tensor, Tensor | None] | None = None
+        target_batch: tuple[Tensor, Tensor, Tensor | None, Tensor | None] | None = None
 
         self.log(
             "training_source_loss",
@@ -671,21 +684,25 @@ class LitTileClassifier(_TileLevelMixin, LitBaseClassifier):
 
         if self.use_coral:
             if target_batch is None:
-                target_bags, target_coords, target_bag_sizes, target_targets = self._next_target_batch()
+                target_bags, target_coords, target_bag_sizes, target_targets, target_clinical = self._unpack_tile_batch(
+                    self._next_target_batch()
+                )
                 _ = target_bag_sizes
-                target_batch = (target_bags, target_coords, target_targets)
+                target_batch = (target_bags, target_coords, target_targets, target_clinical)
             else:
-                target_bags, target_coords, _ = target_batch
+                target_bags, target_coords, _, target_clinical = target_batch
 
             source_embeddings = self._encode_bag_representation(
                 bags=bags,
                 coords=coords,
                 mask=mask,
+                clinical=clinical,
             )
             target_embeddings = self._encode_bag_representation(
                 bags=target_bags,
                 coords=target_coords,
                 mask=None,
+                clinical=target_clinical,
             )
             coral_loss = self._coral_loss(source_embeddings, target_embeddings)
             coral_weight = self._current_coral_weight()
@@ -711,21 +728,25 @@ class LitTileClassifier(_TileLevelMixin, LitBaseClassifier):
                 raise RuntimeError("use_dann=True but domain_classifier was not initialized.")
 
             if target_batch is None:
-                target_bags, target_coords, target_bag_sizes, target_targets = self._next_target_batch()
+                target_bags, target_coords, target_bag_sizes, target_targets, target_clinical = self._unpack_tile_batch(
+                    self._next_target_batch()
+                )
                 _ = target_bag_sizes
-                target_batch = (target_bags, target_coords, target_targets)
+                target_batch = (target_bags, target_coords, target_targets, target_clinical)
             else:
-                target_bags, target_coords, _ = target_batch
+                target_bags, target_coords, _, target_clinical = target_batch
 
             source_embeddings = self._encode_bag_representation(
                 bags=bags,
                 coords=coords,
                 mask=mask,
+                clinical=clinical,
             )
             target_embeddings = self._encode_bag_representation(
                 bags=target_bags,
                 coords=target_coords,
                 mask=None,
+                clinical=target_clinical,
             )
 
             domain_weight = self._current_domain_weight()
@@ -770,19 +791,26 @@ class LitTileClassifier(_TileLevelMixin, LitBaseClassifier):
 
         if self.use_pseudolabels:
             if target_batch is None:
-                target_bags, target_coords, target_bag_sizes, target_targets = self._next_target_batch()
+                target_bags, target_coords, target_bag_sizes, target_targets, target_clinical = self._unpack_tile_batch(
+                    self._next_target_batch()
+                )
                 _ = target_bag_sizes
-                target_batch = (target_bags, target_coords, target_targets)
+                target_batch = (target_bags, target_coords, target_targets, target_clinical)
             else:
-                target_bags, target_coords, target_targets = target_batch
+                target_bags, target_coords, target_targets, target_clinical = target_batch
             if target_targets is None:
                 raise RuntimeError("Pseudo-label training requires target labels but got None.")
-            target_bags, target_coords, _, target_targets = self._move_batch_to_model_device(
+            target_bags, target_coords, _, target_targets, target_clinical = self._move_batch_to_model_device(
                 bags=target_bags,
                 coords=target_coords,
                 targets=target_targets,
+                clinical=target_clinical,
             )
-            target_logits = self.model(target_bags, coords=target_coords, mask=None)
+            target_logits = (
+                self.model(target_bags, coords=target_coords, mask=None, clinical=target_clinical)
+                if target_clinical is not None
+                else self.model(target_bags, coords=target_coords, mask=None)
+            )
             pseudolabel_loss = self._compute_classification_loss(target_logits, target_targets)
             pseudolabel_weight = self._current_pseudolabel_weight()
             total_loss = total_loss + pseudolabel_weight * pseudolabel_loss
@@ -804,19 +832,26 @@ class LitTileClassifier(_TileLevelMixin, LitBaseClassifier):
 
         if self.use_distillation:
             if target_batch is None:
-                target_bags, target_coords, target_bag_sizes, target_targets = self._next_target_batch()
+                target_bags, target_coords, target_bag_sizes, target_targets, target_clinical = self._unpack_tile_batch(
+                    self._next_target_batch()
+                )
                 _ = target_bag_sizes
-                target_batch = (target_bags, target_coords, target_targets)
+                target_batch = (target_bags, target_coords, target_targets, target_clinical)
             else:
-                target_bags, target_coords, target_targets = target_batch
+                target_bags, target_coords, target_targets, target_clinical = target_batch
             if target_targets is None:
                 raise RuntimeError("Distillation requires target soft labels but got None.")
-            target_bags, target_coords, _, target_targets = self._move_batch_to_model_device(
+            target_bags, target_coords, _, target_targets, target_clinical = self._move_batch_to_model_device(
                 bags=target_bags,
                 coords=target_coords,
                 targets=target_targets,
+                clinical=target_clinical,
             )
-            target_logits = self.model(target_bags, coords=target_coords, mask=None)
+            target_logits = (
+                self.model(target_bags, coords=target_coords, mask=None, clinical=target_clinical)
+                if target_clinical is not None
+                else self.model(target_bags, coords=target_coords, mask=None)
+            )
             distillation_loss = self._compute_distillation_loss(target_logits, target_targets)
             distillation_weight = self._current_distillation_weight()
             total_loss = total_loss + distillation_weight * distillation_loss
@@ -863,21 +898,21 @@ class LitTileClassifier(_TileLevelMixin, LitBaseClassifier):
 
     def validation_step(
         self,
-        batch: tuple[Bags, CoordinatesBatch, BagSizes, EncodedTargets] | list[Tensor],
+        batch: TileBatch,
         batch_idx: int,
     ) -> Loss:
         return self._step(batch=batch, step_name="validation", use_mask=False)
 
     def test_step(
         self,
-        batch: tuple[Bags, CoordinatesBatch, BagSizes, EncodedTargets] | list[Tensor],
+        batch: TileBatch,
         batch_idx: int,
     ) -> Loss:
         return self._step(batch=batch, step_name="test", use_mask=False)
 
     def predict_step(
         self,
-        batch: tuple[Bags, CoordinatesBatch, BagSizes, EncodedTargets] | list[Tensor],
+        batch: TileBatch,
         batch_idx: int,
     ) -> Float[Tensor, "batch logit"]:
         bags, coords, bag_sizes, _, clinical = self._unpack_tile_batch(batch)

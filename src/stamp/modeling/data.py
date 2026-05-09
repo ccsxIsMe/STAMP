@@ -90,6 +90,8 @@ def load_unlabeled_patient_data_(
     slide_table: Path,
     patient_label: PandasLabel,
     filename_label: PandasLabel,
+    clini_table: Path | None = None,
+    clinical_preset: str | None = None,
 ) -> tuple[Mapping[PatientId, PatientData[None]], str]:
     """Load target-domain patient bags without requiring labels."""
     feature_type = detect_feature_type(feature_dir)
@@ -113,6 +115,12 @@ def load_unlabeled_patient_data_(
         slide_to_patient=slide_to_patient,
         drop_patients_with_missing_ground_truth=False,
     )
+    patient_to_data = _attach_clinical_features_to_patient_data(
+        patient_to_data=cast(Mapping[PatientId, PatientData], patient_to_data),
+        clini_table=clini_table,
+        clinical_preset=clinical_preset,
+        patient_label=patient_label,
+    )
     return cast(Mapping[PatientId, PatientData[None]], patient_to_data), feature_type
 
 
@@ -126,6 +134,8 @@ def load_pseudolabeled_patient_data_(
     target_label: PandasLabel,
     categories: Sequence[Category],
     confidence_threshold: float = 0.0,
+    clini_table: Path | None = None,
+    clinical_preset: str | None = None,
 ) -> tuple[Mapping[PatientId, PatientData[str]], str]:
     """Load target-domain patient bags with soft-label CSV converted to hard pseudo labels."""
     if len(categories) != 2:
@@ -174,6 +184,12 @@ def load_pseudolabeled_patient_data_(
         slide_to_patient=slide_to_patient,
         drop_patients_with_missing_ground_truth=True,
     )
+    patient_to_data = _attach_clinical_features_to_patient_data(
+        patient_to_data=cast(Mapping[PatientId, PatientData], patient_to_data),
+        clini_table=clini_table,
+        clinical_preset=clinical_preset,
+        patient_label=patient_label,
+    )
     return cast(Mapping[PatientId, PatientData[str]], patient_to_data), feature_type
 
 
@@ -187,6 +203,8 @@ def load_distilled_patient_data_(
     target_label: PandasLabel,
     categories: Sequence[Category],
     confidence_threshold: float = 0.0,
+    clini_table: Path | None = None,
+    clinical_preset: str | None = None,
 ) -> tuple[Mapping[PatientId, PatientData[Tensor]], str]:
     """Load target-domain patient bags with teacher soft labels for distillation."""
     if len(categories) != 2:
@@ -253,6 +271,12 @@ def load_distilled_patient_data_(
         patient_to_ground_truth=cast(Mapping[PatientId, GroundTruth | None], patient_to_ground_truth),
         slide_to_patient=slide_to_patient,
         drop_patients_with_missing_ground_truth=True,
+    )
+    patient_to_data = _attach_clinical_features_to_patient_data(
+        patient_to_data=cast(Mapping[PatientId, PatientData], patient_to_data),
+        clini_table=clini_table,
+        clinical_preset=clinical_preset,
+        patient_label=patient_label,
     )
     return cast(Mapping[PatientId, PatientData[Tensor]], patient_to_data), feature_type
 
@@ -1307,6 +1331,42 @@ def read_table(path: Path | TextIO, **kwargs) -> pd.DataFrame:
         )
 
 
+def _attach_clinical_features_to_patient_data(
+    *,
+    patient_to_data: Mapping[PatientId, PatientData],
+    clini_table: Path | None,
+    clinical_preset: str | None,
+    patient_label: PandasLabel,
+) -> Mapping[PatientId, PatientData]:
+    if clinical_preset is None:
+        return patient_to_data
+    if clini_table is None:
+        raise ValueError(
+            "clinical_preset was provided, but no clini_table was supplied to load clinical features."
+        )
+
+    clini_df_for_features = read_table(clini_table, dtype=str)
+    normalizer = fit_clinical_normalizer(
+        clini_df=clini_df_for_features,
+        preset_name=clinical_preset,
+        patient_label=patient_label,
+    )
+    clinical_vectors = transform_clinical_table(
+        clini_df=clini_df_for_features,
+        normalizer=normalizer,
+        patient_label=patient_label,
+    )
+    return {
+        patient_id: PatientData(
+            ground_truth=patient_data.ground_truth,
+            feature_files=patient_data.feature_files,
+            clinical_features=clinical_vectors.get(patient_id),
+        )
+        for patient_id, patient_data in patient_to_data.items()
+        if patient_id in clinical_vectors
+    }
+
+
 def filter_complete_patient_data_(
     *,
     patient_to_ground_truth: Mapping[
@@ -1477,20 +1537,6 @@ def load_patient_data_(
     """
     feature_type = detect_feature_type(feature_dir)
 
-    clini_df_for_features = read_table(clini_table, dtype=str)
-    clinical_vectors: dict[PatientId, Tensor] | None = None
-    if clinical_preset is not None:
-        normalizer = fit_clinical_normalizer(
-            clini_df=clini_df_for_features,
-            preset_name=clinical_preset,
-            patient_label=patient_label,
-        )
-        clinical_vectors = transform_clinical_table(
-            clini_df=clini_df_for_features,
-            normalizer=normalizer,
-            patient_label=patient_label,
-        )
-
     if feature_type in ("tile", "slide"):
         if slide_table is None:
             raise ValueError("A slide table is required for tile/slide-level features")
@@ -1559,16 +1605,12 @@ def load_patient_data_(
     else:
         raise RuntimeError(f"Unknown feature type: {feature_type}")
 
-    if clinical_vectors is not None:
-        patient_to_data = {
-            patient_id: PatientData(
-                ground_truth=patient_data.ground_truth,
-                feature_files=patient_data.feature_files,
-                clinical_features=clinical_vectors.get(patient_id),
-            )
-            for patient_id, patient_data in patient_to_data.items()
-            if patient_id in clinical_vectors
-        }
+    patient_to_data = _attach_clinical_features_to_patient_data(
+        patient_to_data=patient_to_data,
+        clini_table=clini_table,
+        clinical_preset=clinical_preset,
+        patient_label=patient_label,
+    )
 
     return patient_to_data, feature_type
 

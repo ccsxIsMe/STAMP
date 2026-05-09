@@ -282,6 +282,8 @@ def categorical_crossval_(
                         target_label=cast(str, config.ground_truth_label),
                         categories=cast(Sequence[str], train_categories),
                         confidence_threshold=advanced.distillation_confidence_threshold,
+                        clini_table=config.target_clini_table,
+                        clinical_preset=config.clinical_preset,
                     )
                 elif advanced.use_pseudolabels:
                     if config.target_pseudolabel_csv is None:
@@ -300,6 +302,8 @@ def categorical_crossval_(
                         target_label=cast(str, config.ground_truth_label),
                         categories=cast(Sequence[str], train_categories),
                         confidence_threshold=advanced.pseudolabel_confidence_threshold,
+                        clini_table=config.target_clini_table,
+                        clinical_preset=config.clinical_preset,
                     )
                 else:
                     target_patient_to_data, target_feature_type = load_unlabeled_patient_data_(
@@ -307,6 +311,8 @@ def categorical_crossval_(
                         slide_table=config.target_slide_table,
                         patient_label=config.patient_label,
                         filename_label=config.filename_label,
+                        clini_table=config.target_clini_table,
+                        clinical_preset=config.clinical_preset,
                     )
                 if target_feature_type != feature_type:
                     raise ValueError(
