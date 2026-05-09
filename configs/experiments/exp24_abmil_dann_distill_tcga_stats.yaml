@@ -1,0 +1,8 @@
+statistics:
+  output_dir: "/data3/chensx/STAMP/outputs/stats/exp24_abmil_dann_distill_tcga"
+  task: "classification"
+  ground_truth_label: "Early recurrence"
+  true_class: "1"
+
+  pred_csvs:
+    - "/data3/chensx/STAMP/outputs/deploy/exp24_abmil_dann_distill/patient-preds_95_confidence_interval.csv"

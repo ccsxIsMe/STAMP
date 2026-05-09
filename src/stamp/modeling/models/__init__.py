@@ -633,6 +633,7 @@ class LitTileClassifier(_TileLevelMixin, LitBaseClassifier):
         logits = self.model(bags, coords=coords, mask=mask)
         source_loss = self._compute_classification_loss(logits, targets)
         total_loss = source_loss
+        target_batch: tuple[Tensor, Tensor, Tensor | None] | None = None
 
         self.log(
             "training_source_loss",
@@ -643,8 +644,12 @@ class LitTileClassifier(_TileLevelMixin, LitBaseClassifier):
         )
 
         if self.use_coral:
-            target_bags, target_coords, target_bag_sizes, _ = self._next_target_batch()
-            _ = target_bag_sizes
+            if target_batch is None:
+                target_bags, target_coords, target_bag_sizes, target_targets = self._next_target_batch()
+                _ = target_bag_sizes
+                target_batch = (target_bags, target_coords, target_targets)
+            else:
+                target_bags, target_coords, _ = target_batch
 
             source_embeddings = self._encode_bag_representation(
                 bags=bags,
@@ -679,8 +684,12 @@ class LitTileClassifier(_TileLevelMixin, LitBaseClassifier):
             if self.domain_classifier is None:
                 raise RuntimeError("use_dann=True but domain_classifier was not initialized.")
 
-            target_bags, target_coords, target_bag_sizes, _ = self._next_target_batch()
-            _ = target_bag_sizes
+            if target_batch is None:
+                target_bags, target_coords, target_bag_sizes, target_targets = self._next_target_batch()
+                _ = target_bag_sizes
+                target_batch = (target_bags, target_coords, target_targets)
+            else:
+                target_bags, target_coords, _ = target_batch
 
             source_embeddings = self._encode_bag_representation(
                 bags=bags,
@@ -734,8 +743,14 @@ class LitTileClassifier(_TileLevelMixin, LitBaseClassifier):
             )
 
         if self.use_pseudolabels:
-            target_bags, target_coords, target_bag_sizes, target_targets = self._next_target_batch()
-            _ = target_bag_sizes
+            if target_batch is None:
+                target_bags, target_coords, target_bag_sizes, target_targets = self._next_target_batch()
+                _ = target_bag_sizes
+                target_batch = (target_bags, target_coords, target_targets)
+            else:
+                target_bags, target_coords, target_targets = target_batch
+            if target_targets is None:
+                raise RuntimeError("Pseudo-label training requires target labels but got None.")
             target_bags, target_coords, _, target_targets = self._move_batch_to_model_device(
                 bags=target_bags,
                 coords=target_coords,
@@ -762,8 +777,14 @@ class LitTileClassifier(_TileLevelMixin, LitBaseClassifier):
             )
 
         if self.use_distillation:
-            target_bags, target_coords, target_bag_sizes, target_targets = self._next_target_batch()
-            _ = target_bag_sizes
+            if target_batch is None:
+                target_bags, target_coords, target_bag_sizes, target_targets = self._next_target_batch()
+                _ = target_bag_sizes
+                target_batch = (target_bags, target_coords, target_targets)
+            else:
+                target_bags, target_coords, target_targets = target_batch
+            if target_targets is None:
+                raise RuntimeError("Distillation requires target soft labels but got None.")
             target_bags, target_coords, _, target_targets = self._move_batch_to_model_device(
                 bags=target_bags,
                 coords=target_coords,
