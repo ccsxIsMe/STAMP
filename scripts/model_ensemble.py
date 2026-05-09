@@ -73,6 +73,17 @@ def _normalize_weights(weights: list[float]) -> np.ndarray:
     return arr / arr.sum()
 
 
+def _load_weights_from_summary(summary_path: Path) -> np.ndarray:
+    if not summary_path.exists():
+        raise FileNotFoundError(f"Could not find ensemble summary file: {summary_path}")
+    with open(summary_path, "r", encoding="utf-8") as f:
+        data = json.load(f)
+    weights = data.get("weights")
+    if weights is None:
+        raise KeyError(f"'weights' not found in {summary_path}")
+    return _normalize_weights(list(weights))
+
+
 def _resolve_prediction_file(base_dir: Path, *, mode: str, split_idx: int | None = None) -> Path | None:
     candidates: list[Path] = []
     if mode == "crossval":
@@ -301,6 +312,7 @@ if __name__ == "__main__":
     parser.add_argument("--output_dir", type=Path, required=True)
     parser.add_argument("--mode", choices=["crossval", "deploy"], default="crossval")
     parser.add_argument("--weights", nargs="+", type=float, default=None, help="Optional ensemble weights, one per directory")
+    parser.add_argument("--weights_from_summary", type=Path, default=None, help="Optional path to an ensemble_summary.json file from a previous crossval run")
     parser.add_argument("--search_weights", action="store_true", help="Search the best 2-model weight on internal crossval OOF predictions")
     args = parser.parse_args()
 
@@ -310,8 +322,16 @@ if __name__ == "__main__":
         raise ValueError("--search_weights is only supported in crossval mode")
     if args.search_weights and args.weights is not None:
         raise ValueError("Use either --weights or --search_weights, not both")
+    if args.search_weights and args.weights_from_summary is not None:
+        raise ValueError("Use either --search_weights or --weights_from_summary, not both")
+    if args.weights is not None and args.weights_from_summary is not None:
+        raise ValueError("Use either --weights or --weights_from_summary, not both")
 
-    weights = _normalize_weights(args.weights) if args.weights is not None else None
+    weights = None
+    if args.weights is not None:
+        weights = _normalize_weights(args.weights)
+    elif args.weights_from_summary is not None:
+        weights = _load_weights_from_summary(args.weights_from_summary)
 
     if args.mode == "crossval":
         ensemble_crossval(
