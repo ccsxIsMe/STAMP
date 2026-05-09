@@ -64,6 +64,7 @@ def train_categorical_model_(
         patient_label=config.patient_label,
         filename_label=config.filename_label,
         drop_patients_with_missing_ground_truth=True,
+        clinical_preset=config.clinical_preset,
     )
     _logger.info(f"Detected feature type: {feature_type}")
 
@@ -194,6 +195,15 @@ def setup_model_for_training(
     model_specific_params = (
         advanced.model_params.model_dump().get(advanced.model_name.value) or {}
     )
+    if advanced.model_name.value == "abmil_clinical":
+        first_batch = next(iter(train_dl))
+        if len(first_batch) != 5:
+            raise ValueError(
+                "abmil_clinical requires dataloaders with clinical features. "
+                "Set a valid clinical_preset in the config."
+            )
+        clinical_tensor = first_batch[4]
+        model_specific_params["clinical_dim"] = int(clinical_tensor.shape[-1])
 
     # 5. Calculate total steps for scheduler
     steps_per_epoch = len(train_dl)
@@ -317,6 +327,15 @@ def setup_model_from_dataloaders(
     model_specific_params = (
         advanced.model_params.model_dump().get(advanced.model_name.value) or {}
     )
+    if advanced.model_name.value == "abmil_clinical":
+        first_batch = next(iter(train_dl))
+        if len(first_batch) != 5:
+            raise ValueError(
+                "abmil_clinical requires dataloaders with clinical features. "
+                "Set a valid clinical_preset in the config."
+            )
+        clinical_tensor = first_batch[4]
+        model_specific_params["clinical_dim"] = int(clinical_tensor.shape[-1])
 
     # 5. Calculate total steps for scheduler
     steps_per_epoch = len(train_dl)

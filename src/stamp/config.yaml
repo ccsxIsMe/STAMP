@@ -103,6 +103,7 @@ crossval:
 
   # Change the precision of features during training
   #use_vary_precision_transform: true
+  #clinical_preset: "tcga_shared"
 
 advanced_config:
   # Optional target-domain training modes
@@ -169,6 +170,7 @@ training:
 
   # Change the precision of features during training
   #use_vary_precision_transform: true
+  #clinical_preset: "tcga_shared"
 
 
 deployment:
@@ -202,6 +204,7 @@ deployment:
 
   patient_label: "PATIENT"
   filename_label: "FILENAME"
+  #clinical_preset: "tcga_shared"
   # Optional: during deployment, sample a fixed-size sub-bag instead of using
   # all tiles at once. Useful when training used bag sampling and external
   # cohorts contain many distracting tiles.

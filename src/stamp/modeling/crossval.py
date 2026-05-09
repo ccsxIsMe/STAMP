@@ -68,6 +68,7 @@ def categorical_crossval_(
         patient_label=config.patient_label,
         filename_label=config.filename_label,
         drop_patients_with_missing_ground_truth=True,
+        clinical_preset=config.clinical_preset,
     )
     _logger.info(f"Detected feature type: {feature_type}")
 

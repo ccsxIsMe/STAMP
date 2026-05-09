@@ -523,8 +523,23 @@ class LitTileClassifier(_TileLevelMixin, LitBaseClassifier):
     def forward(
         self,
         bags: Bags,
+        clinical: Tensor | None = None,
     ) -> Float[Tensor, "batch logit"]:
+        if clinical is not None:
+            return self.model(bags, clinical=clinical)
         return self.model(bags)
+
+    @staticmethod
+    def _unpack_tile_batch(
+        batch: tuple | list,
+    ) -> tuple[Bags, CoordinatesBatch, BagSizes, EncodedTargets, Tensor | None]:
+        if len(batch) == 4:
+            bags, coords, bag_sizes, targets = batch
+            return bags, coords, bag_sizes, targets, None
+        if len(batch) == 5:
+            bags, coords, bag_sizes, targets, clinical = batch
+            return bags, coords, bag_sizes, targets, clinical
+        raise ValueError(f"Unexpected tile batch length: {len(batch)}")
 
     def _encode_bag_representation(
         self,
@@ -555,7 +570,8 @@ class LitTileClassifier(_TileLevelMixin, LitBaseClassifier):
         coords: CoordinatesBatch,
         mask: Bool[Tensor, "batch tile"] | None = None,
         targets: EncodedTargets | None = None,
-    ) -> tuple[Bags, CoordinatesBatch, Bool[Tensor, "batch tile"] | None, EncodedTargets | None]:
+        clinical: Tensor | None = None,
+    ) -> tuple[Bags, CoordinatesBatch, Bool[Tensor, "batch tile"] | None, EncodedTargets | None, Tensor | None]:
         param_dtype = next(self.model.parameters()).dtype
         bags = bags.to(device=self.device, dtype=param_dtype)
         coords = coords.to(device=self.device, dtype=param_dtype)
@@ -563,7 +579,9 @@ class LitTileClassifier(_TileLevelMixin, LitBaseClassifier):
             mask = mask.to(device=self.device)
         if targets is not None:
             targets = targets.to(device=self.device)
-        return bags, coords, mask, targets
+        if clinical is not None:
+            clinical = clinical.to(device=self.device, dtype=param_dtype)
+        return bags, coords, mask, targets, clinical
 
     def _step(
         self,
@@ -572,13 +590,17 @@ class LitTileClassifier(_TileLevelMixin, LitBaseClassifier):
         step_name: str,
         use_mask: bool,
     ) -> Loss:
-        bags, coords, bag_sizes, targets = batch
+        bags, coords, bag_sizes, targets, clinical = self._unpack_tile_batch(batch)
 
         mask = (
             self._mask_from_bags(bags=bags, bag_sizes=bag_sizes) if use_mask else None
         )
 
-        logits = self.model(bags, coords=coords, mask=mask)
+        logits = (
+            self.model(bags, coords=coords, mask=mask, clinical=clinical)
+            if clinical is not None
+            else self.model(bags, coords=coords, mask=mask)
+        )
 
         loss = self._compute_classification_loss(logits, targets)
 
@@ -626,11 +648,15 @@ class LitTileClassifier(_TileLevelMixin, LitBaseClassifier):
         batch: tuple[Bags, CoordinatesBatch, BagSizes, EncodedTargets] | list[Tensor],
         batch_idx: int,
     ) -> Loss:
-        bags, coords, bag_sizes, targets = batch
+        bags, coords, bag_sizes, targets, clinical = self._unpack_tile_batch(batch)
         _ = bag_sizes, batch_idx
         mask = None
 
-        logits = self.model(bags, coords=coords, mask=mask)
+        logits = (
+            self.model(bags, coords=coords, mask=mask, clinical=clinical)
+            if clinical is not None
+            else self.model(bags, coords=coords, mask=mask)
+        )
         source_loss = self._compute_classification_loss(logits, targets)
         total_loss = source_loss
         target_batch: tuple[Tensor, Tensor, Tensor | None] | None = None
@@ -854,12 +880,15 @@ class LitTileClassifier(_TileLevelMixin, LitBaseClassifier):
         batch: tuple[Bags, CoordinatesBatch, BagSizes, EncodedTargets] | list[Tensor],
         batch_idx: int,
     ) -> Float[Tensor, "batch logit"]:
-        bags, coords, bag_sizes, _ = batch
+        bags, coords, bag_sizes, _, clinical = self._unpack_tile_batch(batch)
         # adding a mask here will *drastically* and *unbearably* increase memory usage
         # Ensure input dtype matches model weights to avoid dtype-mismatch errors
         param_dtype = next(self.model.parameters()).dtype
         bags = bags.to(dtype=param_dtype)
         coords = coords.to(dtype=param_dtype)
+        if clinical is not None:
+            clinical = clinical.to(dtype=param_dtype)
+            return self.model(bags, coords=coords, mask=None, clinical=clinical)
         return self.model(bags, coords=coords, mask=None)
 
 

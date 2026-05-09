@@ -50,6 +50,7 @@ from stamp.types import (
     TilePixels,
 )
 from stamp.utils.seed import Seed
+from stamp.modeling.clinical import fit_clinical_normalizer, transform_clinical_table
 
 _logger = logging.getLogger("stamp")
 
@@ -80,6 +81,7 @@ class PatientData(Generic[GroundTruthType]):
     _ = KW_ONLY
     ground_truth: GroundTruthType
     feature_files: Iterable[FeaturePath | _BinaryIOLike]
+    clinical_features: Tensor | None = None
 
 
 def load_unlabeled_patient_data_(
@@ -287,15 +289,26 @@ def tile_bag_dataloader(
         task=task,
         categories=categories,
     )
+    has_clinical_features = any(
+        patient.clinical_features is not None for patient in patient_data
+    )
 
     is_multitarget = isinstance(targets[0], dict)
 
-    collate_fn = _collate_multitarget if is_multitarget else _collate_to_tuple
+    if has_clinical_features:
+        if is_multitarget:
+            raise ValueError("Clinical-feature fusion does not yet support multi-target classification.")
+        collate_fn = _collate_with_clinical
+    else:
+        collate_fn = _collate_multitarget if is_multitarget else _collate_to_tuple
 
     ds = BagDataset(
         bags=[patient.feature_files for patient in patient_data],
         bag_size=bag_size,
         ground_truths=targets,
+        clinical_features=[
+            patient.clinical_features for patient in patient_data
+        ],
         transform=transform,
         deterministic=(
             deterministic_sampling
@@ -467,6 +480,35 @@ def _collate_to_tuple(
     encoded_targets = torch.stack(fixed_targets)
 
     return (bags, coords, bag_sizes, encoded_targets)
+
+
+def _collate_with_clinical(
+    items: list[tuple[_Bag, _Coordinates, BagSize, _EncodedTarget, Tensor | None]],
+) -> tuple[Bags, CoordinatesBatch, BagSizes, EncodedTargets, Tensor]:
+    bags = torch.stack([bag for bag, _, _, _, _ in items])
+    coords = torch.stack([coord for _, coord, _, _, _ in items])
+    bag_sizes = torch.tensor([bagsize for _, _, bagsize, _, _ in items])
+
+    targets = [et for _, _, _, et, _ in items]
+    fixed_targets = []
+    for et in targets:
+        et = torch.as_tensor(et)
+        if et.ndim == 0:
+            et = et.unsqueeze(0)
+        elif et.ndim > 1:
+            et = et.view(-1)
+        fixed_targets.append(et)
+    encoded_targets = torch.stack(fixed_targets)
+
+    clinical_features = [cf for _, _, _, _, cf in items]
+    if any(cf is None for cf in clinical_features):
+        raise ValueError("Clinical fusion batch contains missing clinical features.")
+    clinical_tensor = torch.stack(
+        [cast(Tensor, cf) for cf in clinical_features],
+        dim=0,
+    )
+
+    return bags, coords, bag_sizes, encoded_targets, clinical_tensor
 
 
 def _collate_multitarget(
@@ -750,6 +792,7 @@ class BagDataset(Dataset[tuple[_Bag, _Coordinates, BagSize, _EncodedTarget]]):
     """
 
     ground_truths: Tensor | list[dict[str, Tensor]]
+    clinical_features: Sequence[Tensor | None] | None = None
 
     # ground_truths: Bool[Tensor, "index category_is_hot"]
     # """The ground truth for each bag, one-hot encoded."""
@@ -761,6 +804,10 @@ class BagDataset(Dataset[tuple[_Bag, _Coordinates, BagSize, _EncodedTarget]]):
         if len(self.bags) != len(self.ground_truths):
             raise ValueError(
                 "the number of ground truths has to match the number of bags"
+            )
+        if self.clinical_features is not None and len(self.bags) != len(self.clinical_features):
+            raise ValueError(
+                "the number of clinical feature vectors has to match the number of bags"
             )
         # Initialise per-worker HDF5 handle cache here so __getitem__ avoids
         # a hasattr() call on every tile read.
@@ -781,7 +828,7 @@ class BagDataset(Dataset[tuple[_Bag, _Coordinates, BagSize, _EncodedTarget]]):
 
     def __getitem__(
         self, index: int
-    ) -> tuple[_Bag, _Coordinates, BagSize, _EncodedTarget]:
+    ) -> tuple[_Bag, _Coordinates, BagSize, _EncodedTarget] | tuple[_Bag, _Coordinates, BagSize, _EncodedTarget, Tensor | None]:
         # Collect all the features
         feats = []
         coords_um = []
@@ -834,8 +881,12 @@ class BagDataset(Dataset[tuple[_Bag, _Coordinates, BagSize, _EncodedTarget]]):
             feats = self.transform(feats)
 
         # Sample a subset, if required
+        clinical_features = (
+            None if self.clinical_features is None else self.clinical_features[index]
+        )
+
         if self.bag_size is not None:
-            return (
+            bag_tuple = (
                 *_to_fixed_size_bag(
                     feats,
                     coords=coords_um,
@@ -845,12 +896,16 @@ class BagDataset(Dataset[tuple[_Bag, _Coordinates, BagSize, _EncodedTarget]]):
                 self.ground_truths[index],
             )
         else:
-            return (
+            bag_tuple = (
                 feats,
                 coords_um,
                 len(feats),
                 self.ground_truths[index],
             )
+
+        if self.clinical_features is None:
+            return bag_tuple
+        return (*bag_tuple, clinical_features)
 
 
 class PatientFeatureDataset(Dataset):
@@ -1411,6 +1466,7 @@ def load_patient_data_(
     patient_label: PandasLabel,
     filename_label: PandasLabel,
     drop_patients_with_missing_ground_truth: bool = True,
+    clinical_preset: str | None = None,
 ) -> tuple[Mapping[PatientId, PatientData], str]:
     """Load patient data based on feature type (tile, slide, or patient).
 
@@ -1420,6 +1476,20 @@ def load_patient_data_(
         (patient_to_data, feature_type)
     """
     feature_type = detect_feature_type(feature_dir)
+
+    clini_df_for_features = read_table(clini_table, dtype=str)
+    clinical_vectors: dict[PatientId, Tensor] | None = None
+    if clinical_preset is not None:
+        normalizer = fit_clinical_normalizer(
+            clini_df=clini_df_for_features,
+            preset_name=clinical_preset,
+            patient_label=patient_label,
+        )
+        clinical_vectors = transform_clinical_table(
+            clini_df=clini_df_for_features,
+            normalizer=normalizer,
+            patient_label=patient_label,
+        )
 
     if feature_type in ("tile", "slide"):
         if slide_table is None:
@@ -1488,6 +1558,17 @@ def load_patient_data_(
         )
     else:
         raise RuntimeError(f"Unknown feature type: {feature_type}")
+
+    if clinical_vectors is not None:
+        patient_to_data = {
+            patient_id: PatientData(
+                ground_truth=patient_data.ground_truth,
+                feature_files=patient_data.feature_files,
+                clinical_features=clinical_vectors.get(patient_id),
+            )
+            for patient_id, patient_data in patient_to_data.items()
+            if patient_id in clinical_vectors
+        }
 
     return patient_to_data, feature_type
 

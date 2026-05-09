@@ -48,6 +48,7 @@ class TrainConfig(BaseModel):
 
     # Experimental features
     use_vary_precision_transform: bool = False
+    clinical_preset: str | None = None
 
 
 class CrossvalConfig(TrainConfig):
@@ -82,6 +83,7 @@ class DeploymentConfig(BaseModel):
 
     num_workers: int = min(os.cpu_count() or 1, 16)
     accelerator: str = "gpu" if torch.cuda.is_available() else "cpu"
+    clinical_preset: str | None = None
 
 
 class VitModelParams(BaseModel):
@@ -116,6 +118,9 @@ class AbmilModelParams(BaseModel):
     model_config = ConfigDict(extra="forbid")
     dim_hidden: int = 256
     dropout: float = 0.25
+    clinical_dim: int = Field(0, ge=0)
+    clinical_hidden_dim: int = Field(128, ge=1)
+    fusion_dropout: float = Field(0.25, ge=0.0, lt=1.0)
 
 
 class DsmilModelParams(BaseModel):
@@ -177,6 +182,7 @@ class ModelParams(BaseModel):
     linear: LinearModelParams = Field(default_factory=LinearModelParams)
     barspoon: BarspoonParams = Field(default_factory=BarspoonParams)
     abmil: AbmilModelParams = Field(default_factory=AbmilModelParams)
+    abmil_clinical: AbmilModelParams = Field(default_factory=AbmilModelParams)
     dsmil: DsmilModelParams = Field(default_factory=DsmilModelParams)
 
 

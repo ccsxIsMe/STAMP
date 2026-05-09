@@ -19,6 +19,7 @@ from stamp.modeling.data import (
     patient_to_survival_from_clini_table_,
     slide_to_patient_from_slide_table_,
 )
+from stamp.modeling.clinical import fit_clinical_normalizer, transform_clinical_table
 from stamp.modeling.registry import ModelName, load_model_class
 from stamp.types import (
     Category,
@@ -75,6 +76,7 @@ def deploy_categorical_model_(
     random_sampling: bool,
     num_workers: int,
     accelerator: str | Accelerator,
+    clinical_preset: str | None,
 ) -> None:
     """Deploy categorical model(s) and save predictions.
 
@@ -235,6 +237,27 @@ def deploy_categorical_model_(
             slide_to_patient=slide_to_patient,
             drop_patients_with_missing_ground_truth=False,
         )
+        if clinical_preset is not None and clini_table is not None:
+            clini_df_for_features = pd.read_csv(clini_table, dtype=str)
+            normalizer = fit_clinical_normalizer(
+                clini_df=clini_df_for_features,
+                preset_name=clinical_preset,
+                patient_label=patient_label,
+            )
+            clinical_vectors = transform_clinical_table(
+                clini_df=clini_df_for_features,
+                normalizer=normalizer,
+                patient_label=patient_label,
+            )
+            patient_to_data = {
+                patient_id: type(patient_data)(
+                    ground_truth=patient_data.ground_truth,
+                    feature_files=patient_data.feature_files,
+                    clinical_features=clinical_vectors.get(patient_id),
+                )
+                for patient_id, patient_data in patient_to_data.items()
+                if patient_id in clinical_vectors
+            }
 
         patient_ids = list(patient_to_data.keys())
     elif feature_type == "patient":

@@ -188,6 +188,7 @@ def _run_cli(args: argparse.Namespace) -> None:
                 random_sampling=config.deployment.random_sampling,
                 num_workers=config.deployment.num_workers,
                 accelerator=config.deployment.accelerator,
+                clinical_preset=config.deployment.clinical_preset,
                 ground_truth_label=config.deployment.ground_truth_label,
                 time_label=config.deployment.time_label,
                 status_label=config.deployment.status_label,
