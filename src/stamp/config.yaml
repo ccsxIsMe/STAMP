@@ -97,6 +97,7 @@ crossval:
   #target_clini_table: "/path/of/target_clini.csv"
   #target_slide_table: "/path/of/target_slide.csv"
   #target_feature_dir: "/path/of/target_features"
+  #target_pseudolabel_csv: "/path/of/target_patient_preds.csv"
 
   # Experimental features:
 
@@ -372,6 +373,14 @@ advanced_config:
   domain_hidden_dim: 256
   # Dropout in the domain discriminator.
   domain_dropout: 0.1
+  # Enable training on target-domain pseudo labels.
+  use_pseudolabels: false
+  # Weight of the pseudo-label loss term.
+  pseudolabel_loss_weight: 0.0
+  # Linearly ramp pseudo-label loss weight from 0 to pseudolabel_loss_weight.
+  pseudolabel_warmup_epochs: 0
+  # Optional confidence threshold on target positive-class probability.
+  pseudolabel_confidence_threshold: 0.0
   # Select a model regardless of task
   model_name: "vit" # or mlp, linear, trans_mil, trans_mil_fusion, dsmil, dtfd_mil, barspoon
 

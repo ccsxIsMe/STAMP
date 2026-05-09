@@ -12,6 +12,7 @@ from stamp.modeling.config import AdvancedConfig, CrossvalConfig
 from stamp.modeling.data import (
     PatientData,
     create_dataloader,
+    load_pseudolabeled_patient_data_,
     load_unlabeled_patient_data_,
     load_patient_data_,
     log_patient_class_summary,
@@ -251,19 +252,37 @@ def categorical_crossval_(
             )
 
             target_train_dl = None
-            if advanced.use_coral or advanced.use_dann:
+            if advanced.use_coral or advanced.use_dann or advanced.use_pseudolabels:
                 if config.target_feature_dir is None or config.target_slide_table is None:
                     raise ValueError(
-                        "advanced_config.use_coral/use_dann requires "
+                        "advanced_config.use_coral/use_dann/use_pseudolabels requires "
                         "`target_feature_dir` and `target_slide_table`."
                     )
+                if advanced.use_pseudolabels:
+                    if config.target_pseudolabel_csv is None:
+                        raise ValueError(
+                            "advanced_config.use_pseudolabels=true requires `target_pseudolabel_csv`."
+                        )
+                    if not isinstance(train_categories, Sequence) or isinstance(train_categories, str):
+                        raise ValueError("Pseudo-label training currently supports single-target classification only.")
 
-                target_patient_to_data, target_feature_type = load_unlabeled_patient_data_(
-                    feature_dir=config.target_feature_dir,
-                    slide_table=config.target_slide_table,
-                    patient_label=config.patient_label,
-                    filename_label=config.filename_label,
-                )
+                    target_patient_to_data, target_feature_type = load_pseudolabeled_patient_data_(
+                        feature_dir=config.target_feature_dir,
+                        slide_table=config.target_slide_table,
+                        pseudolabel_csv=config.target_pseudolabel_csv,
+                        patient_label=config.patient_label,
+                        filename_label=config.filename_label,
+                        target_label=cast(str, config.ground_truth_label),
+                        categories=cast(Sequence[str], train_categories),
+                        confidence_threshold=advanced.pseudolabel_confidence_threshold,
+                    )
+                else:
+                    target_patient_to_data, target_feature_type = load_unlabeled_patient_data_(
+                        feature_dir=config.target_feature_dir,
+                        slide_table=config.target_slide_table,
+                        patient_label=config.patient_label,
+                        filename_label=config.filename_label,
+                    )
                 if target_feature_type != feature_type:
                     raise ValueError(
                         "Source and target feature types must match for domain adaptation. "
@@ -281,9 +300,14 @@ def categorical_crossval_(
                     transform=None,
                     categories=train_categories,
                 )
-                method_name = "CORAL" if advanced.use_coral and not advanced.use_dann else (
-                    "DANN" if advanced.use_dann and not advanced.use_coral else "CORAL+DANN"
-                )
+                active_methods = []
+                if advanced.use_coral:
+                    active_methods.append("CORAL")
+                if advanced.use_dann:
+                    active_methods.append("DANN")
+                if advanced.use_pseudolabels:
+                    active_methods.append("PSEUDO")
+                method_name = "+".join(active_methods)
                 _logger.info(
                     "%s enabled with %s unlabeled target patients from %s",
                     method_name,

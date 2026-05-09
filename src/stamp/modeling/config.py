@@ -56,6 +56,7 @@ class CrossvalConfig(TrainConfig):
     target_clini_table: Path | None = None
     target_slide_table: Path | None = None
     target_feature_dir: Path | None = None
+    target_pseudolabel_csv: Path | None = None
 
 
 class DeploymentConfig(BaseModel):
@@ -207,6 +208,10 @@ class AdvancedConfig(BaseModel):
     domain_warmup_epochs: int = Field(0, ge=0)
     domain_hidden_dim: int = Field(256, ge=1)
     domain_dropout: float = Field(0.1, ge=0.0, lt=1.0)
+    use_pseudolabels: bool = False
+    pseudolabel_loss_weight: float = Field(0.0, ge=0.0)
+    pseudolabel_warmup_epochs: int = Field(0, ge=0)
+    pseudolabel_confidence_threshold: float = Field(0.0, ge=0.0, le=1.0)
     model_name: ModelName | None = Field(
         default=None,
         description='Optional. "vit" or "mlp" are defaults based on feature type.',

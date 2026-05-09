@@ -114,6 +114,67 @@ def load_unlabeled_patient_data_(
     return cast(Mapping[PatientId, PatientData[None]], patient_to_data), feature_type
 
 
+def load_pseudolabeled_patient_data_(
+    *,
+    feature_dir: Path,
+    slide_table: Path,
+    pseudolabel_csv: Path,
+    patient_label: PandasLabel,
+    filename_label: PandasLabel,
+    target_label: PandasLabel,
+    categories: Sequence[Category],
+    confidence_threshold: float = 0.0,
+) -> tuple[Mapping[PatientId, PatientData[str]], str]:
+    """Load target-domain patient bags with soft-label CSV converted to hard pseudo labels."""
+    if len(categories) != 2:
+        raise ValueError("Pseudo-label training currently supports binary classification only.")
+
+    preds_df = read_table(pseudolabel_csv, dtype={patient_label: str})
+    required_cols = {patient_label, f"{target_label}_{categories[1]}"}
+    missing_cols = required_cols - set(preds_df.columns)
+    if missing_cols:
+        raise ValueError(
+            f"Pseudo-label CSV is missing required columns: {sorted(missing_cols)}"
+        )
+
+    positive_col = f"{target_label}_{categories[1]}"
+    preds_df[positive_col] = preds_df[positive_col].astype(float)
+    confidence = (preds_df[positive_col] - 0.5).abs() * 2.0
+    if confidence_threshold > 0:
+        preds_df = preds_df.loc[confidence >= confidence_threshold].copy()
+
+    preds_df[target_label] = np.where(
+        preds_df[positive_col] >= 0.5,
+        str(categories[1]),
+        str(categories[0]),
+    )
+
+    patient_to_ground_truth = {
+        str(row[patient_label]): str(row[target_label])
+        for _, row in preds_df.iterrows()
+    }
+
+    feature_type = detect_feature_type(feature_dir)
+    if feature_type not in ("tile", "slide"):
+        raise ValueError(
+            f"Pseudo-label training currently supports tile/slide features only, got '{feature_type}'."
+        )
+
+    slide_to_patient: Final[dict[FeaturePath, PatientId]] = slide_to_patient_from_slide_table_(
+        slide_table_path=slide_table,
+        feature_dir=feature_dir,
+        patient_label=patient_label,
+        filename_label=filename_label,
+    )
+
+    patient_to_data = filter_complete_patient_data_(
+        patient_to_ground_truth=cast(Mapping[PatientId, GroundTruth | None], patient_to_ground_truth),
+        slide_to_patient=slide_to_patient,
+        drop_patients_with_missing_ground_truth=True,
+    )
+    return cast(Mapping[PatientId, PatientData[str]], patient_to_data), feature_type
+
+
 def tile_bag_dataloader(
     *,
     patient_data: Sequence[PatientData[GroundTruth | None | dict]],

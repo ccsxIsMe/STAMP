@@ -219,6 +219,9 @@ class LitBaseClassifier(Base):
         domain_warmup_epochs: int = 0,
         domain_hidden_dim: int = 256,
         domain_dropout: float = 0.1,
+        use_pseudolabels: bool = False,
+        pseudolabel_loss_weight: float = 0.0,
+        pseudolabel_warmup_epochs: int = 0,
         target_train_dl: Any | None = None,
         **kwargs,
     ) -> None:
@@ -237,6 +240,9 @@ class LitBaseClassifier(Base):
             domain_warmup_epochs=domain_warmup_epochs,
             domain_hidden_dim=domain_hidden_dim,
             domain_dropout=domain_dropout,
+            use_pseudolabels=use_pseudolabels,
+            pseudolabel_loss_weight=pseudolabel_loss_weight,
+            pseudolabel_warmup_epochs=pseudolabel_warmup_epochs,
             **model_metadata,
         )
         self.ground_truth_label = ground_truth_label
@@ -269,6 +275,9 @@ class LitBaseClassifier(Base):
         self.domain_warmup_epochs = domain_warmup_epochs
         self.domain_hidden_dim = domain_hidden_dim
         self.domain_dropout = domain_dropout
+        self.use_pseudolabels = use_pseudolabels
+        self.pseudolabel_loss_weight = pseudolabel_loss_weight
+        self.pseudolabel_warmup_epochs = pseudolabel_warmup_epochs
         self._target_train_dl = target_train_dl
         self._target_train_iterator = None
         self.train_auroc = MulticlassAUROC(len(categories))
@@ -293,6 +302,9 @@ class LitBaseClassifier(Base):
                 "domain_warmup_epochs": domain_warmup_epochs,
                 "domain_hidden_dim": domain_hidden_dim,
                 "domain_dropout": domain_dropout,
+                "use_pseudolabels": use_pseudolabels,
+                "pseudolabel_loss_weight": pseudolabel_loss_weight,
+                "pseudolabel_warmup_epochs": pseudolabel_warmup_epochs,
             }
         )
 
@@ -390,6 +402,14 @@ class LitBaseClassifier(Base):
         return self._current_warmup_weight(
             target_weight=self.domain_loss_weight,
             warmup_epochs=self.domain_warmup_epochs,
+        )
+
+    def _current_pseudolabel_weight(self) -> float:
+        if not self.use_pseudolabels or self.pseudolabel_loss_weight <= 0:
+            return 0.0
+        return self._current_warmup_weight(
+            target_weight=self.pseudolabel_loss_weight,
+            warmup_epochs=self.pseudolabel_warmup_epochs,
         )
 
     def _current_warmup_weight(self, *, target_weight: float, warmup_epochs: int) -> float:
@@ -621,6 +641,29 @@ class LitTileClassifier(_TileLevelMixin, LitBaseClassifier):
             self.log(
                 "training_domain_acc",
                 domain_acc,
+                on_step=False,
+                on_epoch=True,
+                sync_dist=True,
+            )
+
+        if self.use_pseudolabels:
+            target_bags, target_coords, target_bag_sizes, target_targets = self._next_target_batch()
+            _ = target_bag_sizes
+            target_logits = self.model(target_bags, coords=target_coords, mask=None)
+            pseudolabel_loss = self._compute_classification_loss(target_logits, target_targets)
+            pseudolabel_weight = self._current_pseudolabel_weight()
+            total_loss = total_loss + pseudolabel_weight * pseudolabel_loss
+
+            self.log(
+                "training_pseudolabel_loss",
+                pseudolabel_loss,
+                on_step=False,
+                on_epoch=True,
+                sync_dist=True,
+            )
+            self.log(
+                "training_pseudolabel_weight",
+                pseudolabel_weight,
                 on_step=False,
                 on_epoch=True,
                 sync_dist=True,
