@@ -346,10 +346,10 @@ def categorical_crossval_(
             # Infer feature dimension
             batch = next(iter(train_dl))
             if feature_type == "tile":
-                bags, _, _, _ = batch
+                bags = batch[0]
                 dim_feats = bags.shape[-1]
             else:
-                feats, _ = batch
+                feats = batch[0]
                 dim_feats = feats.shape[-1]
 
             model = setup_model_from_dataloaders(

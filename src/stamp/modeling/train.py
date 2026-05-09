@@ -525,10 +525,10 @@ def setup_dataloaders_for_training(
         # Infer feature dimension automatically
         batch = next(iter(train_dl))
         if feature_type == "tile":
-            bags, _, _, _ = batch
+            bags = batch[0]
             dim_feats = bags.shape[-1]
         else:
-            feats, _ = batch
+            feats = batch[0]
             dim_feats = feats.shape[-1]
 
         return (
