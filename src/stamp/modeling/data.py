@@ -175,6 +175,86 @@ def load_pseudolabeled_patient_data_(
     return cast(Mapping[PatientId, PatientData[str]], patient_to_data), feature_type
 
 
+def load_distilled_patient_data_(
+    *,
+    feature_dir: Path,
+    slide_table: Path,
+    teacher_pred_csv: Path,
+    patient_label: PandasLabel,
+    filename_label: PandasLabel,
+    target_label: PandasLabel,
+    categories: Sequence[Category],
+    confidence_threshold: float = 0.0,
+) -> tuple[Mapping[PatientId, PatientData[Tensor]], str]:
+    """Load target-domain patient bags with teacher soft labels for distillation."""
+    if len(categories) != 2:
+        raise ValueError("Soft distillation currently supports binary classification only.")
+
+    preds_df = read_table(teacher_pred_csv, dtype={patient_label: str})
+    required_cols = {
+        patient_label,
+        f"{target_label}_{categories[0]}",
+        f"{target_label}_{categories[1]}",
+    }
+    missing_cols = required_cols - set(preds_df.columns)
+    if missing_cols:
+        raise ValueError(
+            f"Teacher prediction CSV is missing required columns: {sorted(missing_cols)}"
+        )
+
+    negative_col = f"{target_label}_{categories[0]}"
+    positive_col = f"{target_label}_{categories[1]}"
+    preds_df[negative_col] = preds_df[negative_col].astype(float)
+    preds_df[positive_col] = preds_df[positive_col].astype(float)
+
+    teacher_probs = preds_df[[negative_col, positive_col]].to_numpy(dtype=np.float32)
+    row_sums = teacher_probs.sum(axis=1, keepdims=True)
+    valid_rows = np.isfinite(teacher_probs).all(axis=1) & (row_sums.squeeze(-1) > 0)
+    preds_df = preds_df.loc[valid_rows].copy()
+    teacher_probs = teacher_probs[valid_rows]
+    teacher_probs = teacher_probs / teacher_probs.sum(axis=1, keepdims=True)
+
+    confidence = np.abs(teacher_probs[:, 1] - 0.5) * 2.0
+    if confidence_threshold > 0:
+        keep_mask = confidence >= confidence_threshold
+        preds_df = preds_df.loc[keep_mask].copy()
+        teacher_probs = teacher_probs[keep_mask]
+        confidence = confidence[keep_mask]
+
+    patient_to_ground_truth = {
+        str(pid): torch.tensor(
+            [float(prob_0), float(prob_1), float(conf)],
+            dtype=torch.float32,
+        )
+        for pid, (prob_0, prob_1), conf in zip(
+            preds_df[patient_label].astype(str),
+            teacher_probs,
+            confidence,
+            strict=True,
+        )
+    }
+
+    feature_type = detect_feature_type(feature_dir)
+    if feature_type not in ("tile", "slide"):
+        raise ValueError(
+            f"Soft distillation currently supports tile/slide features only, got '{feature_type}'."
+        )
+
+    slide_to_patient: Final[dict[FeaturePath, PatientId]] = slide_to_patient_from_slide_table_(
+        slide_table_path=slide_table,
+        feature_dir=feature_dir,
+        patient_label=patient_label,
+        filename_label=filename_label,
+    )
+
+    patient_to_data = filter_complete_patient_data_(
+        patient_to_ground_truth=cast(Mapping[PatientId, GroundTruth | None], patient_to_ground_truth),
+        slide_to_patient=slide_to_patient,
+        drop_patients_with_missing_ground_truth=True,
+    )
+    return cast(Mapping[PatientId, PatientData[Tensor]], patient_to_data), feature_type
+
+
 def tile_bag_dataloader(
     *,
     patient_data: Sequence[PatientData[GroundTruth | None | dict]],
@@ -263,6 +343,17 @@ def _parse_targets(
     gts = [p.ground_truth for p in patient_data]
 
     if task == "classification":
+        tensor_ground_truths = [
+            gt for gt in gts if isinstance(gt, Tensor)
+        ]
+        if tensor_ground_truths:
+            if len(tensor_ground_truths) != len(gts):
+                raise ValueError(
+                    "Classification ground truths cannot mix Tensor soft labels with non-Tensor labels."
+                )
+            labels = torch.stack([gt.float().view(-1) for gt in tensor_ground_truths], dim=0)
+            return labels, categories or []
+
         if any(isinstance(gt, dict) for gt in gts if gt is not None):
             # infer target names from the first non-None dict
             first_dict = next(gt for gt in gts if isinstance(gt, dict))

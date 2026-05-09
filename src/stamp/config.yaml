@@ -104,6 +104,18 @@ crossval:
   # Change the precision of features during training
   #use_vary_precision_transform: true
 
+advanced_config:
+  # Optional target-domain training modes
+  #use_pseudolabels: false
+  #pseudolabel_loss_weight: 0.0
+  #pseudolabel_warmup_epochs: 0
+  #pseudolabel_confidence_threshold: 0.0
+  #use_distillation: false
+  #distillation_loss_weight: 0.0
+  #distillation_warmup_epochs: 0
+  #distillation_confidence_threshold: 0.0
+  #distillation_temperature: 1.0
+
 
 
 training:

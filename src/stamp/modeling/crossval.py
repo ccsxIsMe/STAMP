@@ -12,6 +12,7 @@ from stamp.modeling.config import AdvancedConfig, CrossvalConfig
 from stamp.modeling.data import (
     PatientData,
     create_dataloader,
+    load_distilled_patient_data_,
     load_pseudolabeled_patient_data_,
     load_unlabeled_patient_data_,
     load_patient_data_,
@@ -252,13 +253,36 @@ def categorical_crossval_(
             )
 
             target_train_dl = None
-            if advanced.use_coral or advanced.use_dann or advanced.use_pseudolabels:
+            if (
+                advanced.use_coral
+                or advanced.use_dann
+                or advanced.use_pseudolabels
+                or advanced.use_distillation
+            ):
                 if config.target_feature_dir is None or config.target_slide_table is None:
                     raise ValueError(
-                        "advanced_config.use_coral/use_dann/use_pseudolabels requires "
+                        "advanced_config.use_coral/use_dann/use_pseudolabels/use_distillation requires "
                         "`target_feature_dir` and `target_slide_table`."
                     )
-                if advanced.use_pseudolabels:
+                if advanced.use_distillation:
+                    if config.target_pseudolabel_csv is None:
+                        raise ValueError(
+                            "advanced_config.use_distillation=true requires `target_pseudolabel_csv`."
+                        )
+                    if not isinstance(train_categories, Sequence) or isinstance(train_categories, str):
+                        raise ValueError("Soft distillation currently supports single-target classification only.")
+
+                    target_patient_to_data, target_feature_type = load_distilled_patient_data_(
+                        feature_dir=config.target_feature_dir,
+                        slide_table=config.target_slide_table,
+                        teacher_pred_csv=config.target_pseudolabel_csv,
+                        patient_label=config.patient_label,
+                        filename_label=config.filename_label,
+                        target_label=cast(str, config.ground_truth_label),
+                        categories=cast(Sequence[str], train_categories),
+                        confidence_threshold=advanced.distillation_confidence_threshold,
+                    )
+                elif advanced.use_pseudolabels:
                     if config.target_pseudolabel_csv is None:
                         raise ValueError(
                             "advanced_config.use_pseudolabels=true requires `target_pseudolabel_csv`."
@@ -308,6 +332,8 @@ def categorical_crossval_(
                     active_methods.append("DANN")
                 if advanced.use_pseudolabels:
                     active_methods.append("PSEUDO")
+                if advanced.use_distillation:
+                    active_methods.append("DISTILL")
                 method_name = "+".join(active_methods)
                 _logger.info(
                     "%s enabled with %s unlabeled target patients from %s",

@@ -212,6 +212,11 @@ class AdvancedConfig(BaseModel):
     pseudolabel_loss_weight: float = Field(0.0, ge=0.0)
     pseudolabel_warmup_epochs: int = Field(0, ge=0)
     pseudolabel_confidence_threshold: float = Field(0.0, ge=0.0, le=1.0)
+    use_distillation: bool = False
+    distillation_loss_weight: float = Field(0.0, ge=0.0)
+    distillation_warmup_epochs: int = Field(0, ge=0)
+    distillation_confidence_threshold: float = Field(0.0, ge=0.0, le=1.0)
+    distillation_temperature: float = Field(1.0, gt=0.0)
     model_name: ModelName | None = Field(
         default=None,
         description='Optional. "vit" or "mlp" are defaults based on feature type.',

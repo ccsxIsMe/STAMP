@@ -222,6 +222,10 @@ class LitBaseClassifier(Base):
         use_pseudolabels: bool = False,
         pseudolabel_loss_weight: float = 0.0,
         pseudolabel_warmup_epochs: int = 0,
+        use_distillation: bool = False,
+        distillation_loss_weight: float = 0.0,
+        distillation_warmup_epochs: int = 0,
+        distillation_temperature: float = 1.0,
         target_train_dl: Any | None = None,
         **kwargs,
     ) -> None:
@@ -243,6 +247,10 @@ class LitBaseClassifier(Base):
             use_pseudolabels=use_pseudolabels,
             pseudolabel_loss_weight=pseudolabel_loss_weight,
             pseudolabel_warmup_epochs=pseudolabel_warmup_epochs,
+            use_distillation=use_distillation,
+            distillation_loss_weight=distillation_loss_weight,
+            distillation_warmup_epochs=distillation_warmup_epochs,
+            distillation_temperature=distillation_temperature,
             **model_metadata,
         )
         self.ground_truth_label = ground_truth_label
@@ -278,6 +286,10 @@ class LitBaseClassifier(Base):
         self.use_pseudolabels = use_pseudolabels
         self.pseudolabel_loss_weight = pseudolabel_loss_weight
         self.pseudolabel_warmup_epochs = pseudolabel_warmup_epochs
+        self.use_distillation = use_distillation
+        self.distillation_loss_weight = distillation_loss_weight
+        self.distillation_warmup_epochs = distillation_warmup_epochs
+        self.distillation_temperature = distillation_temperature
         self._target_train_dl = target_train_dl
         self._target_train_iterator = None
         self.train_auroc = MulticlassAUROC(len(categories))
@@ -305,6 +317,10 @@ class LitBaseClassifier(Base):
                 "use_pseudolabels": use_pseudolabels,
                 "pseudolabel_loss_weight": pseudolabel_loss_weight,
                 "pseudolabel_warmup_epochs": pseudolabel_warmup_epochs,
+                "use_distillation": use_distillation,
+                "distillation_loss_weight": distillation_loss_weight,
+                "distillation_warmup_epochs": distillation_warmup_epochs,
+                "distillation_temperature": distillation_temperature,
             }
         )
 
@@ -430,6 +446,41 @@ class LitBaseClassifier(Base):
             target_weight=self.pseudolabel_loss_weight,
             warmup_epochs=self.pseudolabel_warmup_epochs,
         )
+
+    def _current_distillation_weight(self) -> float:
+        if not self.use_distillation or self.distillation_loss_weight <= 0:
+            return 0.0
+        return self._current_warmup_weight(
+            target_weight=self.distillation_loss_weight,
+            warmup_epochs=self.distillation_warmup_epochs,
+        )
+
+    def _compute_distillation_loss(self, logits: Tensor, soft_targets: Tensor) -> Loss:
+        if soft_targets.ndim != 2 or soft_targets.size(1) < 2:
+            raise ValueError(
+                "Distillation expects target tensors shaped [batch, num_classes(+confidence)]."
+            )
+
+        teacher_probs = soft_targets[:, : len(self.categories)].to(dtype=logits.dtype)
+        confidence = (
+            soft_targets[:, len(self.categories)]
+            if soft_targets.size(1) > len(self.categories)
+            else torch.ones(soft_targets.size(0), device=logits.device, dtype=logits.dtype)
+        )
+        confidence = confidence.to(device=logits.device, dtype=logits.dtype).clamp_min(0.0)
+
+        temperature = float(self.distillation_temperature)
+        student_log_probs = nn.functional.log_softmax(logits / temperature, dim=-1)
+        teacher_probs = teacher_probs / teacher_probs.sum(dim=-1, keepdim=True).clamp_min(1e-8)
+        kl = nn.functional.kl_div(
+            student_log_probs,
+            teacher_probs,
+            reduction="none",
+            log_target=False,
+        ).sum(dim=-1)
+        weighted_kl = kl * confidence
+        normalizer = confidence.sum().clamp_min(1e-8)
+        return weighted_kl.sum() * (temperature**2) / normalizer
 
     def _current_warmup_weight(self, *, target_weight: float, warmup_epochs: int) -> float:
         if warmup_epochs <= 0:
@@ -705,6 +756,34 @@ class LitTileClassifier(_TileLevelMixin, LitBaseClassifier):
             self.log(
                 "training_pseudolabel_weight",
                 pseudolabel_weight,
+                on_step=False,
+                on_epoch=True,
+                sync_dist=True,
+            )
+
+        if self.use_distillation:
+            target_bags, target_coords, target_bag_sizes, target_targets = self._next_target_batch()
+            _ = target_bag_sizes
+            target_bags, target_coords, _, target_targets = self._move_batch_to_model_device(
+                bags=target_bags,
+                coords=target_coords,
+                targets=target_targets,
+            )
+            target_logits = self.model(target_bags, coords=target_coords, mask=None)
+            distillation_loss = self._compute_distillation_loss(target_logits, target_targets)
+            distillation_weight = self._current_distillation_weight()
+            total_loss = total_loss + distillation_weight * distillation_loss
+
+            self.log(
+                "training_distillation_loss",
+                distillation_loss,
+                on_step=False,
+                on_epoch=True,
+                sync_dist=True,
+            )
+            self.log(
+                "training_distillation_weight",
+                distillation_weight,
                 on_step=False,
                 on_epoch=True,
                 sync_dist=True,
