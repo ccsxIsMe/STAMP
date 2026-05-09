@@ -299,6 +299,7 @@ def categorical_crossval_(
                     num_workers=advanced.num_workers,
                     transform=None,
                     categories=train_categories,
+                    persistent_workers=False,
                 )
                 active_methods = []
                 if advanced.use_coral:

@@ -388,6 +388,25 @@ class LitBaseClassifier(Base):
             self._target_train_iterator = iter(self._target_train_dl)
             return next(self._target_train_iterator)
 
+    def _reset_target_train_iterator(self) -> None:
+        self._target_train_iterator = None
+
+    def on_train_epoch_start(self) -> None:
+        self._reset_target_train_iterator()
+        return super().on_train_epoch_start()
+
+    def on_train_end(self) -> None:
+        self._reset_target_train_iterator()
+        return super().on_train_end()
+
+    def on_predict_start(self) -> None:
+        self._reset_target_train_iterator()
+        return super().on_predict_start()
+
+    def teardown(self, stage: str | None = None) -> None:
+        self._reset_target_train_iterator()
+        return super().teardown(stage)
+
     def _current_coral_weight(self) -> float:
         if not self.use_coral or self.coral_weight <= 0:
             return 0.0
