@@ -316,6 +316,11 @@ def tile_bag_dataloader(
     has_clinical_features = any(
         patient.clinical_features is not None for patient in patient_data
     )
+    clinical_features = (
+        [patient.clinical_features for patient in patient_data]
+        if has_clinical_features
+        else None
+    )
 
     is_multitarget = isinstance(targets[0], dict)
 
@@ -330,9 +335,7 @@ def tile_bag_dataloader(
         bags=[patient.feature_files for patient in patient_data],
         bag_size=bag_size,
         ground_truths=targets,
-        clinical_features=[
-            patient.clinical_features for patient in patient_data
-        ],
+        clinical_features=clinical_features,
         transform=transform,
         deterministic=(
             deterministic_sampling
