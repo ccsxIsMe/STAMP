@@ -129,10 +129,11 @@ def _weight_grid_two_models(step: float = 0.05) -> list[np.ndarray]:
     return grid
 
 
-def _search_weights_crossval(
+def _search_weights(
     aligned_scores: list[np.ndarray],
     aligned_labels: list[np.ndarray],
     model_names: list[str],
+    context: str,
 ) -> np.ndarray:
     if len(model_names) != 2:
         raise ValueError("--search_weights currently supports exactly 2 models")
@@ -152,7 +153,7 @@ def _search_weights_crossval(
 
     assert best_weights is not None
     print(
-        f"Best internal OOF weights: "
+        f"Best {context} weights: "
         f"{model_names[0]}={best_weights[0]:.2f}, {model_names[1]}={best_weights[1]:.2f} "
         f"(AUROC={best_auc:.4f})"
     )
@@ -196,10 +197,11 @@ def ensemble_crossval(dirs: list[Path], output_dir: Path, weights: np.ndarray | 
         raise RuntimeError("No completed cross-validation splits found")
 
     if search_weights:
-        weights = _search_weights_crossval(
+        weights = _search_weights(
             aligned_scores=split_scores_all,
             aligned_labels=split_labels_all,
             model_names=model_names,
+            context="internal OOF",
         )
     elif weights is None:
         weights = np.ones(len(dirs), dtype=float) / len(dirs)
@@ -250,11 +252,14 @@ def ensemble_crossval(dirs: list[Path], output_dir: Path, weights: np.ndarray | 
     print(f"\nSaved to: {output_dir}")
 
 
-def ensemble_deploy(dirs: list[Path], output_dir: Path, weights: np.ndarray | None) -> None:
+def ensemble_deploy(
+    dirs: list[Path],
+    output_dir: Path,
+    weights: np.ndarray | None,
+    search_weights: bool,
+) -> None:
     output_dir.mkdir(parents=True, exist_ok=True)
     model_names = [d.name for d in dirs]
-    if weights is None:
-        weights = np.ones(len(dirs), dtype=float) / len(dirs)
 
     dfs = []
     for d in dirs:
@@ -270,6 +275,17 @@ def ensemble_deploy(dirs: list[Path], output_dir: Path, weights: np.ndarray | No
 
     y = dfs[0]["Early recurrence"].astype(int).to_numpy()
     scores = np.stack([df["Early recurrence_1"].astype(float).to_numpy() for df in dfs], axis=0)
+
+    if search_weights:
+        weights = _search_weights(
+            aligned_scores=[scores],
+            aligned_labels=[y],
+            model_names=model_names,
+            context="deploy",
+        )
+    elif weights is None:
+        weights = np.ones(len(dirs), dtype=float) / len(dirs)
+
     ens_score = _score_weighted_ensemble(scores, weights)
 
     for name, df in zip(model_names, dfs):
@@ -280,6 +296,7 @@ def ensemble_deploy(dirs: list[Path], output_dir: Path, weights: np.ndarray | No
 
     out_df = _build_stamp_output(dfs[0].reset_index()[["PATIENT", "Early recurrence"]], ens_score)
     out_df.to_csv(output_dir / "patient-preds.csv", index=False)
+    out_df.to_csv(output_dir / "patient-preds_95_confidence_interval.csv", index=False)
 
     print(
         f"\nEnsemble weights: "
@@ -318,8 +335,6 @@ if __name__ == "__main__":
 
     if args.weights is not None and len(args.weights) != len(args.dirs):
         raise ValueError("--weights must have the same length as --dirs")
-    if args.search_weights and args.mode != "crossval":
-        raise ValueError("--search_weights is only supported in crossval mode")
     if args.search_weights and args.weights is not None:
         raise ValueError("Use either --weights or --search_weights, not both")
     if args.search_weights and args.weights_from_summary is not None:
@@ -341,4 +356,9 @@ if __name__ == "__main__":
             search_weights=args.search_weights,
         )
     else:
-        ensemble_deploy(dirs=args.dirs, output_dir=args.output_dir, weights=weights)
+        ensemble_deploy(
+            dirs=args.dirs,
+            output_dir=args.output_dir,
+            weights=weights,
+            search_weights=args.search_weights,
+        )
