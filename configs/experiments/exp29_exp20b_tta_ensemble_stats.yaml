@@ -1,0 +1,8 @@
+statistics:
+  output_dir: "/data3/chensx/STAMP/outputs/stats/exp29_exp20b_tta_ensemble"
+  task: "classification"
+  ground_truth_label: "Early recurrence"
+  true_class: "1"
+
+  pred_csvs:
+    - "/data3/chensx/STAMP/outputs/deploy/exp29_exp20b_tta_ensemble/patient-preds_95_confidence_interval.csv"
