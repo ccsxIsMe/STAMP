@@ -1,0 +1,4 @@
+,roc_auc_score,roc_auc_score,roc_auc_score,average_precision_score,average_precision_score,average_precision_score,f1_score,f1_score,f1_score,count
+,mean,95%_low,95%_high,mean,95%_low,95%_high,mean,95%_low,95%_high,sum
+0,0.627961529439362,,,0.504743395273747,,,0.5,,,87.0
+1,0.6279615294393619,,,0.7343599703804944,,,0.6642857142857143,,,147.0
