@@ -1,0 +1,11 @@
+heatmaps:
+  output_dir: "/data3/chensx/STAMP/outputs/reports/exp31_pooled_ourdata_tcga_abmil_heatmaps/internal_B202326697"
+  feature_dir: "/data3/chensx/STAMP/outputs/features/ourdata_conch1_5/conch1_5-49b04e14"
+  wsi_dir: "/data3/chensx/Ourdata/Slides"
+  checkpoint_path: "/data3/chensx/STAMP/outputs/crossval/exp31_pooled_ourdata_tcga_abmil/split-0/model.ckpt"
+  slide_paths:
+    - "B202326697.svs"
+  device: "cuda"
+  opacity: 0.6
+  topk: 5
+  bottomk: 5

@@ -1,0 +1,9 @@
+track,experiment,label,auroc
+Internal,exp01_abmil_clinpath,"Internal best
+Pathology + clinical fusion",0.8393654151242729
+Internal,exp20b_abmil_dann_w050,"Internal reference
+ABMIL + DANN",0.7205737704918033
+External,exp20b_abmil_dann_w050_tcga,"External train-time best
+ABMIL + DANN",0.6302291031355071
+External,exp28_exp20b_tta,"External best
+exp20b + TTA",0.6353115959027289

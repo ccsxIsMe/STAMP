@@ -25,6 +25,7 @@ class ModelName(StrEnum):
     BARSPOON = "barspoon"
     ABMIL = "abmil"
     ABMIL_CLINICAL = "abmil_clinical"
+    ABMIL_DOMAIN = "abmil_domain"
     DSMIL = "dsmil"
     TRANS_MIL_FUSION = "trans_mil_fusion"
     DTFD_MIL = "dtfd_mil"
@@ -80,6 +81,11 @@ def load_model_class(task: Task, feature_type: str, model_name: ModelName):
         case ModelName.ABMIL_CLINICAL:
             from stamp.modeling.models.abmil_clinical import (
                 ABMILClinical as ModelClass,
+            )
+
+        case ModelName.ABMIL_DOMAIN:
+            from stamp.modeling.models.abmil_domain import (
+                ABMILDomain as ModelClass,
             )
 
         case ModelName.DSMIL:

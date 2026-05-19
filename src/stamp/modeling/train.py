@@ -195,11 +195,11 @@ def setup_model_for_training(
     model_specific_params = (
         advanced.model_params.model_dump().get(advanced.model_name.value) or {}
     )
-    if advanced.model_name.value == "abmil_clinical":
+    if advanced.model_name.value in {"abmil_clinical", "abmil_domain"}:
         first_batch = next(iter(train_dl))
         if len(first_batch) != 5:
             raise ValueError(
-                "abmil_clinical requires dataloaders with clinical features. "
+                f"{advanced.model_name.value} requires dataloaders with clinical features. "
                 "Set a valid clinical_preset in the config."
             )
         clinical_tensor = first_batch[4]
@@ -216,6 +216,12 @@ def setup_model_for_training(
         "classification_loss": advanced.classification_loss,
         "label_smoothing": advanced.label_smoothing,
         "focal_gamma": advanced.focal_gamma,
+        "use_inbatch_coral": advanced.use_inbatch_coral,
+        "inbatch_coral_weight": advanced.inbatch_coral_weight,
+        "inbatch_coral_warmup_epochs": advanced.inbatch_coral_warmup_epochs,
+        "inbatch_domain_dim": advanced.inbatch_domain_dim,
+        "use_domain_balanced_loss": advanced.use_domain_balanced_loss,
+        "domain_balanced_loss_blend": advanced.domain_balanced_loss_blend,
         "dim_input": dim_feats,
         "total_steps": total_steps,
         "max_lr": advanced.max_lr,
@@ -327,11 +333,11 @@ def setup_model_from_dataloaders(
     model_specific_params = (
         advanced.model_params.model_dump().get(advanced.model_name.value) or {}
     )
-    if advanced.model_name.value == "abmil_clinical":
+    if advanced.model_name.value in {"abmil_clinical", "abmil_domain"}:
         first_batch = next(iter(train_dl))
         if len(first_batch) != 5:
             raise ValueError(
-                "abmil_clinical requires dataloaders with clinical features. "
+                f"{advanced.model_name.value} requires dataloaders with clinical features. "
                 "Set a valid clinical_preset in the config."
             )
         clinical_tensor = first_batch[4]
@@ -351,6 +357,12 @@ def setup_model_from_dataloaders(
         "use_coral": advanced.use_coral,
         "coral_weight": advanced.coral_weight,
         "coral_warmup_epochs": advanced.coral_warmup_epochs,
+        "use_inbatch_coral": advanced.use_inbatch_coral,
+        "inbatch_coral_weight": advanced.inbatch_coral_weight,
+        "inbatch_coral_warmup_epochs": advanced.inbatch_coral_warmup_epochs,
+        "inbatch_domain_dim": advanced.inbatch_domain_dim,
+        "use_domain_balanced_loss": advanced.use_domain_balanced_loss,
+        "domain_balanced_loss_blend": advanced.domain_balanced_loss_blend,
         "use_dann": advanced.use_dann,
         "domain_loss_weight": advanced.domain_loss_weight,
         "domain_warmup_epochs": advanced.domain_warmup_epochs,

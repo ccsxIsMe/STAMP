@@ -119,6 +119,7 @@ class AbmilModelParams(BaseModel):
     dim_hidden: int = 256
     dropout: float = 0.25
     clinical_dim: int = Field(0, ge=0)
+    domain_dim: int = Field(0, ge=0)
     clinical_hidden_dim: int = Field(128, ge=1)
     fusion_dropout: float = Field(0.25, ge=0.0, lt=1.0)
 
@@ -183,6 +184,7 @@ class ModelParams(BaseModel):
     barspoon: BarspoonParams = Field(default_factory=BarspoonParams)
     abmil: AbmilModelParams = Field(default_factory=AbmilModelParams)
     abmil_clinical: AbmilModelParams = Field(default_factory=AbmilModelParams)
+    abmil_domain: AbmilModelParams = Field(default_factory=AbmilModelParams)
     dsmil: DsmilModelParams = Field(default_factory=DsmilModelParams)
 
 
@@ -209,6 +211,12 @@ class AdvancedConfig(BaseModel):
     use_coral: bool = False
     coral_weight: float = Field(0.0, ge=0.0)
     coral_warmup_epochs: int = Field(0, ge=0)
+    use_inbatch_coral: bool = False
+    inbatch_coral_weight: float = Field(0.0, ge=0.0)
+    inbatch_coral_warmup_epochs: int = Field(0, ge=0)
+    inbatch_domain_dim: int = Field(0, ge=0)
+    use_domain_balanced_loss: bool = False
+    domain_balanced_loss_blend: float = Field(1.0, ge=0.0, le=1.0)
     use_dann: bool = False
     domain_loss_weight: float = Field(0.0, ge=0.0)
     domain_warmup_epochs: int = Field(0, ge=0)

@@ -219,6 +219,12 @@ class LitBaseClassifier(Base):
         use_coral: bool = False,
         coral_weight: float = 0.0,
         coral_warmup_epochs: int = 0,
+        use_inbatch_coral: bool = False,
+        inbatch_coral_weight: float = 0.0,
+        inbatch_coral_warmup_epochs: int = 0,
+        inbatch_domain_dim: int = 0,
+        use_domain_balanced_loss: bool = False,
+        domain_balanced_loss_blend: float = 1.0,
         use_dann: bool = False,
         domain_loss_weight: float = 0.0,
         domain_warmup_epochs: int = 0,
@@ -244,6 +250,12 @@ class LitBaseClassifier(Base):
             use_coral=use_coral,
             coral_weight=coral_weight,
             coral_warmup_epochs=coral_warmup_epochs,
+            use_inbatch_coral=use_inbatch_coral,
+            inbatch_coral_weight=inbatch_coral_weight,
+            inbatch_coral_warmup_epochs=inbatch_coral_warmup_epochs,
+            inbatch_domain_dim=inbatch_domain_dim,
+            use_domain_balanced_loss=use_domain_balanced_loss,
+            domain_balanced_loss_blend=domain_balanced_loss_blend,
             use_dann=use_dann,
             domain_loss_weight=domain_loss_weight,
             domain_warmup_epochs=domain_warmup_epochs,
@@ -283,6 +295,12 @@ class LitBaseClassifier(Base):
         self.use_coral = use_coral
         self.coral_weight = coral_weight
         self.coral_warmup_epochs = coral_warmup_epochs
+        self.use_inbatch_coral = use_inbatch_coral
+        self.inbatch_coral_weight = inbatch_coral_weight
+        self.inbatch_coral_warmup_epochs = inbatch_coral_warmup_epochs
+        self.inbatch_domain_dim = inbatch_domain_dim
+        self.use_domain_balanced_loss = use_domain_balanced_loss
+        self.domain_balanced_loss_blend = domain_balanced_loss_blend
         self.use_dann = use_dann
         self.domain_loss_weight = domain_loss_weight
         self.domain_warmup_epochs = domain_warmup_epochs
@@ -314,6 +332,12 @@ class LitBaseClassifier(Base):
                 "use_coral": use_coral,
                 "coral_weight": coral_weight,
                 "coral_warmup_epochs": coral_warmup_epochs,
+                "use_inbatch_coral": use_inbatch_coral,
+                "inbatch_coral_weight": inbatch_coral_weight,
+                "inbatch_coral_warmup_epochs": inbatch_coral_warmup_epochs,
+                "inbatch_domain_dim": inbatch_domain_dim,
+                "use_domain_balanced_loss": use_domain_balanced_loss,
+                "domain_balanced_loss_blend": domain_balanced_loss_blend,
                 "use_dann": use_dann,
                 "domain_loss_weight": domain_loss_weight,
                 "domain_warmup_epochs": domain_warmup_epochs,
@@ -436,6 +460,14 @@ class LitBaseClassifier(Base):
             warmup_epochs=self.coral_warmup_epochs,
         )
 
+    def _current_inbatch_coral_weight(self) -> float:
+        if not self.use_inbatch_coral or self.inbatch_coral_weight <= 0:
+            return 0.0
+        return self._current_warmup_weight(
+            target_weight=self.inbatch_coral_weight,
+            warmup_epochs=self.inbatch_coral_warmup_epochs,
+        )
+
     def _current_domain_weight(self) -> float:
         if not self.use_dann or self.domain_loss_weight <= 0:
             return 0.0
@@ -545,6 +577,48 @@ class LitTileClassifier(_TileLevelMixin, LitBaseClassifier):
             bags, coords, bag_sizes, targets, clinical = batch
             return bags, coords, bag_sizes, targets, clinical
         raise ValueError(f"Unexpected tile batch length: {len(batch)}")
+
+    def _domain_indices_from_clinical(
+        self,
+        clinical: Tensor | None,
+        *,
+        domain_dim: int | None = None,
+    ) -> Tensor | None:
+        resolved_domain_dim = domain_dim
+        if resolved_domain_dim is None or resolved_domain_dim <= 1:
+            resolved_domain_dim = self.inbatch_domain_dim
+        if resolved_domain_dim <= 1:
+            resolved_domain_dim = int(getattr(self.model, "domain_dim", 0) or 0)
+
+        if clinical is None or resolved_domain_dim <= 1:
+            return None
+        if clinical.size(-1) < resolved_domain_dim:
+            raise ValueError(
+                "clinical feature dimension is smaller than the resolved domain dimension."
+            )
+        domain_onehot = clinical[:, -resolved_domain_dim:]
+        return domain_onehot.argmax(dim=-1).long()
+
+    def _encode_pathology_bag_representation(
+        self,
+        *,
+        bags: Bags,
+        coords: CoordinatesBatch,
+        mask: Bool[Tensor, "batch tile"] | None,
+    ) -> Tensor:
+        encode_bag = getattr(self.model, "encode_bag", None)
+        if encode_bag is None:
+            raise RuntimeError(
+                "In-batch CORAL requires a backbone exposing `encode_bag(...)`, "
+                f"but {type(self.model).__name__} does not provide it."
+            )
+
+        param_dtype = next(self.model.parameters()).dtype
+        bags = bags.to(device=self.device, dtype=param_dtype)
+        coords = coords.to(device=self.device, dtype=param_dtype)
+        if mask is not None:
+            mask = mask.to(device=self.device)
+        return encode_bag(bags, coords=coords, mask=mask)
 
     def _encode_bag_representation(
         self,
@@ -671,6 +745,39 @@ class LitTileClassifier(_TileLevelMixin, LitBaseClassifier):
             else self.model(bags, coords=coords, mask=mask)
         )
         source_loss = self._compute_classification_loss(logits, targets)
+        if self.use_domain_balanced_loss:
+            domain_idx = self._domain_indices_from_clinical(clinical)
+            if domain_idx is not None:
+                unique_domains = domain_idx.unique(sorted=True)
+                domain_losses = []
+                for domain_id in unique_domains.tolist():
+                    domain_mask = domain_idx == domain_id
+                    if int(domain_mask.sum()) == 0:
+                        continue
+                    domain_losses.append(
+                        self._compute_classification_loss(
+                            logits[domain_mask],
+                            targets[domain_mask],
+                        )
+                    )
+                if len(domain_losses) >= 2:
+                    domain_balanced_loss = torch.stack(domain_losses).mean()
+                    blend = self.domain_balanced_loss_blend
+                    source_loss = (1.0 - blend) * source_loss + blend * domain_balanced_loss
+                    self.log(
+                        "training_domain_balanced_loss",
+                        domain_balanced_loss,
+                        on_step=False,
+                        on_epoch=True,
+                        sync_dist=True,
+                    )
+                    self.log(
+                        "training_domain_balanced_blend",
+                        blend,
+                        on_step=False,
+                        on_epoch=True,
+                        sync_dist=True,
+                    )
         total_loss = source_loss
         target_batch: tuple[Tensor, Tensor, Tensor | None, Tensor | None] | None = None
 
@@ -681,6 +788,56 @@ class LitTileClassifier(_TileLevelMixin, LitBaseClassifier):
             on_epoch=True,
             sync_dist=True,
         )
+
+        if self.use_inbatch_coral:
+            coral_weight = self._current_inbatch_coral_weight()
+            domain_idx = self._domain_indices_from_clinical(clinical)
+            if coral_weight > 0 and domain_idx is not None:
+                unique_domains = domain_idx.unique(sorted=True)
+                domain_groups = [
+                    domain_id
+                    for domain_id in unique_domains.tolist()
+                    if int((domain_idx == domain_id).sum()) > 0
+                ]
+                if len(domain_groups) >= 2:
+                    source_embeddings = self._encode_pathology_bag_representation(
+                        bags=bags,
+                        coords=coords,
+                        mask=mask,
+                    )
+                    reference_embeddings = source_embeddings[
+                        domain_idx == domain_groups[0]
+                    ]
+                    coral_terms = []
+                    for domain_id in domain_groups[1:]:
+                        target_embeddings = source_embeddings[domain_idx == domain_id]
+                        coral_terms.append(
+                            self._coral_loss(reference_embeddings, target_embeddings)
+                        )
+                    inbatch_coral_loss = torch.stack(coral_terms).mean()
+                    total_loss = total_loss + coral_weight * inbatch_coral_loss
+
+                    self.log(
+                        "training_inbatch_coral_loss",
+                        inbatch_coral_loss,
+                        on_step=False,
+                        on_epoch=True,
+                        sync_dist=True,
+                    )
+                    self.log(
+                        "training_inbatch_coral_weight",
+                        coral_weight,
+                        on_step=False,
+                        on_epoch=True,
+                        sync_dist=True,
+                    )
+                    self.log(
+                        "training_inbatch_domain_count",
+                        float(len(domain_groups)),
+                        on_step=False,
+                        on_epoch=True,
+                        sync_dist=True,
+                    )
 
         if self.use_coral:
             if target_batch is None:

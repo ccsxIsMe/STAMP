@@ -1,0 +1,38 @@
+crossval:
+  output_dir: "/data3/chensx/STAMP/outputs/crossval/exp32_pooled_shared_domain_abmil_clinical"
+
+  clini_table: "/data3/chensx/STAMP/outputs/tables/pooled_ourdata_tcga_conch_clinical.csv"
+  feature_dir: "/data3/chensx/STAMP/outputs/features"
+  slide_table: "/data3/chensx/STAMP/outputs/tables/pooled_ourdata_tcga_conch_slide_table.csv"
+
+  task: "classification"
+  ground_truth_label: "Early recurrence"
+  categories: ["0", "1"]
+  patient_label: "PATIENT"
+  filename_label: "FILENAME"
+  n_splits: 5
+  clinical_preset: "pooled_shared_domain"
+
+advanced_config:
+  seed: 42
+  max_epochs: 32
+  patience: 12
+  batch_size: 64
+  bag_size: 512
+  eval_bag_size: 512
+  eval_sample_count: 8
+  eval_random_sampling: true
+  max_lr: 1e-4
+  div_factor: 25.0
+  monitor_metric: "validation_auroc"
+  monitor_mode: "max"
+  use_class_weights: true
+
+  model_name: "abmil_clinical"
+
+  model_params:
+    abmil_clinical:
+      dim_hidden: 256
+      clinical_hidden_dim: 128
+      dropout: 0.25
+      fusion_dropout: 0.25

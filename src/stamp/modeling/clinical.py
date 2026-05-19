@@ -31,6 +31,42 @@ SHARED_CLINICAL_PRESETS: dict[str, dict[str, Sequence[dict[str, Sequence[str]]]]
                 ],
             },
         ],
+    },
+    "pooled_shared_domain": {
+        "continuous": [
+            {
+                "name": "age",
+                "aliases": ["年龄", "骞撮緞", "age_at_initial_pathologic_diagnosis"],
+            },
+        ],
+        "categorical": [
+            {
+                "name": "sex",
+                "aliases": ["性别", "鎬у埆", "gender"],
+            },
+            {
+                "name": "grade",
+                "aliases": [
+                    "组织学分级（分化）",
+                    "缁勭粐瀛﹀垎绾э紙鍒嗗寲锛?",
+                    "Histological_grade",
+                    "histological_grade",
+                ],
+            },
+            {
+                "name": "dataset",
+                "aliases": ["dataset"],
+            },
+        ],
+    },
+    "pooled_domain_only": {
+        "continuous": [],
+        "categorical": [
+            {
+                "name": "dataset",
+                "aliases": ["dataset"],
+            },
+        ],
     }
 }
 

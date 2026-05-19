@@ -1,0 +1,11 @@
+heatmaps:
+  output_dir: "/data3/chensx/STAMP/outputs/reports/valid_demo/heatmaps/external_TCGA-WX-AA47_exp20b_split0"
+  feature_dir: "/data3/chensx/STAMP/outputs/features/tcga_conch1_5_macenko/conch1_5-0c8f09e5"
+  wsi_dir: "/data3/chensx/TCGA_LIHC_labeled/Slides"
+  checkpoint_path: "/data3/chensx/STAMP/outputs/crossval/exp20b_abmil_dann_w050/split-0/model.ckpt"
+  slide_paths:
+    - "TCGA-WX-AA47.svs"
+  device: "cuda"
+  opacity: 0.6
+  topk: 5
+  bottomk: 5
